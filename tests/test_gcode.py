@@ -219,13 +219,41 @@ def test_parser_tracks_modes_tools_and_arcs():
     assert "".join(p.lines) == text
 
 
-def test_optional_real_sample_from_orca():
-    """When a person has added tests/data/sample.gcode, the parser must find layers in it."""
+def test_real_sample_from_orca():
+    """tests/data/sample.gcode: Garth's export from OrcaSlicer 2.5.0 (Voron 2.4, Klipper,
+    0.2 mm layers) of a block with one roofed pocket, the nut body set to Modifier.
+
+    The record is what the plugin reported in Orca for that part: pocket 5.8 x 5.8 x 2.0
+    with its floor at Z 1.0 and its roof at Z 3.0.
+    """
     from pathlib import Path
 
-    sample = Path(__file__).parent / "data" / "sample.gcode"
-    if not sample.exists():
-        pytest.skip("tests/data/sample.gcode comes from the probe run in Orca")
-    p = parse(sample.read_bytes().decode("utf-8", "surrogateescape"))
-    seg, _ = p.extruding
-    assert len(np.unique(np.round(seg[:, 5], 3))) > 3
+    from nutcore.report import NutRecord, Report
+
+    text = (Path(__file__).parent / "data" / "sample.gcode").read_bytes().decode(
+        "utf-8", "surrogateescape")
+    record = NutRecord(
+        index=1, object=1, instance=1, part=1, name="NUT_M3SQ", key="M3SQ", cls="FLAT",
+        axis=[0, 0, 1], yaw_deg=0.0, tilt_deg=0.0, body_size=[5.5, 5.5, 1.8],
+        placement=[164.706, 158.320, 1.9], z_low=1.0, z_high=2.8, roof_z=3.0,
+        pocket={"width": [5.8, 5.8], "thickness": None, "depth": 2.0, "seat_gaps": [0.0]},
+        box={"centre": [164.706, 158.320, 2.0], "axes": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+             "half": [2.9, 2.9, 1.0]},
+        window=[2.9, 3.0])
+    result = run(text, Report(nuts=[record]), firmware="auto", flavor="klipper")
+    assert result.status == "success", result.message
+    export = result.report.nuts[0].export
+    assert (export["layer"], export["layer_z"], export["z_low"]) == (
+        15, pytest.approx(3.0), pytest.approx(1.0))
+    lines = result.text.splitlines()
+    at = lines.index(f"{BEGIN} layer_z=3.000 count=1")
+    assert lines[at + 1] == ("INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 "
+                             "Z_LOW=1.000 YAW=0.00 FEEDER=1 TOOL=-1")
+    assert lines[at + 2] == END
+    assert ";Z:3.2" in lines[at + 3:at + 8]            # the block closes the layer at Z 3.0
+    assert lines[8].startswith("; NUT_INSERT_SUMMARY")  # right after ; HEADER_BLOCK_END
+    # The same file with the pocket claimed somewhere solid must fail the proof.
+    record.placement = [150.0, 150.0, 1.9]
+    record.box = dict(record.box, centre=[150.0, 150.0, 2.0])
+    solid = run(text, Report(nuts=[record]), firmware="klipper")
+    assert solid.status == "failure" and "E_POCKET_NOT_EMPTY" in export_codes(solid)

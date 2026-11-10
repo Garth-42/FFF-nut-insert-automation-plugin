@@ -124,3 +124,11 @@ Each entry says what differs from the spec and why. Newest last.
     recognised by an empty stored config; each capability then stores `{"activated": true}`.
     For the slicing capability that marker is replaced by the real settings on the first
     save, which also counts as non-empty.
+35. **Activity list.** `state.note()` keeps the last 80 events (checks, each slicing step's
+    first call, the export result, any exception with file and line) and the panel shows
+    them. New page messages `get_log` / `log`. Where Orca writes `print()` output is not
+    known, so without this a silent failure in a slicing step could not be seen at all.
+36. **"All clear" notification, and a time on every notification.** Orca gives a plugin no
+    way to close a notification, so an error stayed on screen after it was fixed. When a
+    check finds nothing wrong after one that did, the plugin raises a regular notification
+    saying earlier nut messages no longer apply.

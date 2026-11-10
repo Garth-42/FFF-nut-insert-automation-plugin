@@ -102,6 +102,7 @@ class NutInsert(orca.slicing.SlicingPipelineCapabilityBase):
             _call("set_config_owner", self)
 
     def execute(self, ctx):
+        _call("note_step", ctx.step)
         if ctx.step == orca.slicing.Step.posSlice:
             return _call("slice_gate")
         if ctx.step == orca.slicing.Step.psGCodePostProcess:

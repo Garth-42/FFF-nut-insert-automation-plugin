@@ -6,6 +6,7 @@ from .. import _fake
 class NotificationLevel(enum.Enum):
     WarningNotificationLevel = 1
     ErrorNotificationLevel = 2
+    RegularNotificationLevel = 3
 
 
 class DockPanel:
@@ -39,6 +40,6 @@ def create_dock_panel(html, title="", width=0, height=0, on_message=None, on_clo
     return panel
 
 
-def push_notification(level, message):
+def push_notification(level, message, hyper_text="", on_click=None):
     _fake.ui_call()
     _fake.notifications.append((level, message))

@@ -96,6 +96,12 @@ back to the same position, primed, with the positioning and extruder modes uncha
   <span class="muted" id="saved"></span>
 </div>
 
+<h2>Activity</h2>
+<p class="muted">What the plugin did, newest last. Slicing and export steps report here.
+Useful when something does not happen.</p>
+<div class="row"><button id="log-refresh">Refresh</button></div>
+<textarea id="log" rows="8" readonly spellcheck="false"></textarea>
+
 <h2>Import and export</h2>
 <p class="muted">Export shows the settings as JSON to copy. To import, paste JSON here and press
 Import, then Save.</p>
@@ -303,6 +309,10 @@ Import, then Save.</p>
     } else if (m.type === 'report') {
       showError('');
       renderReport(m.report);
+      send({type: 'get_log'});
+    } else if (m.type === 'log') {
+      $('log').value = (m.lines || []).join('\n');
+      $('log').scrollTop = $('log').scrollHeight;
     } else if (m.type === 'stale') {
       $('stale').classList.remove('hidden');
     } else if (m.type === 'error') {
@@ -311,6 +321,7 @@ Import, then Save.</p>
   }
 
   $('check').addEventListener('click', function () { send({type: 'check'}); });
+  $('log-refresh').addEventListener('click', function () { send({type: 'get_log'}); });
   $('save').addEventListener('click', function () { send({type: 'save_config', config: config}); });
   $('revert').addEventListener('click', function () { if (saved) { handle({type: 'config', config: saved}); } });
   $('add').addEventListener('click', function () {

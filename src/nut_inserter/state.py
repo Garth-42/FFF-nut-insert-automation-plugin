@@ -24,6 +24,8 @@ panel = None                   # the docked panel's handle
 tabs: list = []                # Nuts tab capabilities that have said "ready"
 last_check_seconds = 0.0
 _notified: frozenset = frozenset()
+activity: list = []            # recent events as text, shown in the panel for troubleshooting
+_steps_seen: set = set()
 _edges: tuple = ("", [])       # (snapshot fingerprint, segments)
 
 STALE_MESSAGE = ("E_STALE: the nut report is out of date. Run Check nuts (Plugins window or "
@@ -36,6 +38,27 @@ def reset() -> None:
     report, stale, config_owner, panel = None, False, None, None
     last_check_seconds, _notified, _edges = 0.0, frozenset(), ("", [])
     tabs.clear()
+    activity.clear()
+    _steps_seen.clear()
+
+
+def note(text: str) -> None:
+    """Remember one line for the panel's activity list.
+
+    Where OrcaSlicer writes a plugin's print() output is not known, so this list
+    is the only place a user can see what the slicing steps did. Appending to a
+    list is safe from the slicing thread; nothing is posted to the UI here.
+    """
+    activity.append(f"{time.strftime('%H:%M:%S')}  {text}")
+    del activity[:-80]
+
+
+def note_step(step) -> None:
+    """Record the first time each slicing step calls the plugin."""
+    name = getattr(step, "name", str(step))
+    if name not in _steps_seen:
+        _steps_seen.add(name)
+        note(f"slicing step {name} reached the plugin")
 
 
 def guarded(fn, *args):
@@ -45,6 +68,9 @@ def guarded(fn, *args):
         return result if result is not None else adapter.success()
     except Exception as exc:  # noqa: BLE001  never crash the host
         traceback.print_exc()
+        where = traceback.extract_tb(exc.__traceback__)[-1]
+        note(f"ERROR in {getattr(fn, '__name__', fn)}: {exc!r} "
+             f"({where.filename.rsplit('/', 1)[-1]} line {where.lineno})")
         return adapter.failure(str(exc))
 
 
@@ -95,8 +121,9 @@ def run_check():
         broadcast({"type": "error", "message": problem})
     _notify(new)
     s = new.summary
-    return adapter.success(f"{len(new.nuts)} nut(s): {s['ok']} ok, {s['warning']} warning, "
-                           f"{s['error']} error")
+    text = f"{len(new.nuts)} nut(s): {s['ok']} ok, {s['warning']} warning, {s['error']} error"
+    note(f"check: {text}, {last_check_seconds * 1000:.0f} ms")
+    return adapter.success(text)
 
 
 def check_action():
@@ -124,17 +151,31 @@ def mark_stale() -> None:
 
 
 def _notify(new: Report) -> None:
-    """One notification when the set of errors and warnings has changed."""
+    """One notification when the set of errors and warnings has changed.
+
+    Orca gives a plugin no way to close a notification it raised, so an old one
+    stays on screen after the problem is fixed. To make that readable, every
+    notification carries the time of its check, and an "all clear" follows once
+    nothing is wrong any more.
+    """
     global _notified
     problems = [(n, f) for n in new.nuts for f in n.findings if f.level in (ERROR, WARNING)]
     keys = frozenset((n.object, n.instance, n.part, f.code) for n, f in problems)
     fresh = [(n, f) for n, f in problems if (n.object, n.instance, n.part, f.code) not in _notified]
+    had_problems = bool(_notified)
     _notified = keys
+    stamp = time.strftime("%H:%M:%S")
+    if not problems:
+        if had_problems:
+            adapter.notify_info(f"Nut check {stamp}: all clear, {len(new.nuts)} nut(s) OK. "
+                                "Earlier nut messages no longer apply.")
+        return
     if not fresh:
         return
     errors = sum(1 for _, f in problems if f.level == ERROR)
     warnings = len(problems) - errors
-    text = f"Nut check: {errors} error(s), {warnings} warning(s). {fresh[0][1].message}"
+    text = (f"Nut check {stamp}: {errors} error(s), {warnings} warning(s). "
+            f"{fresh[0][1].message}")
     if len(problems) > 1:
         text += " See the Nuts tab for the rest."
     adapter.notify(errors > 0, text)
@@ -146,6 +187,7 @@ def slice_gate():
     """At posSlice. Cheap and repeatable: it may run once per object."""
     current = report
     if current is None or stale or current.stale:
+        note("slice gate: blocked, the report is missing or out of date")
         return adapter.failure(STALE_MESSAGE)
     if not current.nuts:
         return adapter.success()
@@ -156,6 +198,7 @@ def slice_gate():
         for n in failing[:5]:
             shown.append(next(f.message for f in n.findings if f.level == ERROR))
         more = f" (and {len(failing) - 5} more nuts)" if len(failing) > 5 else ""
+        note(f"slice gate: blocked by {len(failing)} nut(s) with errors")
         return adapter.failure("Nut check failed. " + " ".join(shown) + more)
     return adapter.success(f"{len(current.nuts)} nut(s) checked")
 
@@ -164,15 +207,19 @@ def export(ctx):
     """At psGCodePostProcess. Edits the G-code file in place, or leaves it untouched."""
     current = report
     if current is None or stale or current.stale:
+        note("export: failed, the report is missing or out of date")
         return adapter.failure(STALE_MESSAGE)
     if not current.nuts:
+        note("export: no nuts in the report, file left alone")
         return adapter.success()
     config, _ = read_config()
     path = adapter.gcode_path(ctx)
+    flavor = adapter.config_value(ctx, "gcode_flavor")
+    note(f"export: started on {path!r}, gcode_flavor={flavor!r}")
     with open(path, "rb") as handle:
         text = handle.read().decode("utf-8", "surrogateescape")
     result = gcode_inject.inject(text, current, library.parse(config),
-                                 flavor=adapter.config_value(ctx, "gcode_flavor"),
+                                 flavor=flavor,
                                  print_sequence=adapter.config_value(ctx, "print_sequence"))
     if result.changed:
         with open(path, "wb") as handle:
@@ -181,6 +228,7 @@ def export(ctx):
         for old, new in zip(current.nuts, result.report.nuts, strict=True):
             old.export = new.export      # shown the next time a page asks for the report
     print(f"Nut insert: {result.status}: {result.message}")
+    note(f"export: {result.status}: {result.message}")
     if result.status == gcode_inject.FAILURE:
         return adapter.failure(result.message)
     if result.status == gcode_inject.SKIPPED:
@@ -234,6 +282,8 @@ def _handle(message: dict, reply) -> None:
             _save_config(message.get("config"), reply)
         elif kind == "get_edges":
             reply(_edges_message())
+        elif kind == "get_log":
+            reply({"type": "log", "lines": list(activity)})
         elif kind == "get_csv":
             reply({"type": "csv", "text": report.to_csv() if report else ""})
         else:

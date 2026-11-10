@@ -92,6 +92,13 @@ def test_rotating_the_part_raises_one_warning_notification(plugin):
     assert level == orca.host.ui.NotificationLevel.WarningNotificationLevel and "tilted" in text
     plugin.check.execute()                                         # same findings: no repeat
     assert len(orca._fake.notifications) == 1
+    orca._fake.set_model(model())                                  # problem fixed
+    plugin.check.execute()
+    level, text = orca._fake.notifications[-1]
+    assert level == orca.host.ui.NotificationLevel.RegularNotificationLevel
+    assert "all clear" in text and len(orca._fake.notifications) == 2
+    plugin.check.execute()                                         # still fine: nothing new
+    assert len(orca._fake.notifications) == 2
 
 
 def test_ready_is_answered_with_config_and_report(plugin):
@@ -297,3 +304,24 @@ def test_install_session_only_asks_for_a_restart():
         assert check.execute().status == OK
     finally:
         nut_inserter._setup_pending = False
+
+
+def test_activity_list_records_slicing_and_export(plugin, tmp_path):
+    orca._fake.set_model(model())
+    plugin.check.execute()
+    path = tmp_path / "plate_1.gcode"
+    path.write_text(gcode_ring())
+    plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice))
+    plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice))
+    plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.psGCodePostProcess,
+                                         gcode_path=str(path), config={"gcode_flavor": "klipper"}))
+    plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.psGCodePostProcess,
+                                         gcode_path="/no/such/file"))
+    plugin.panel.on_message({"type": "get_log"})
+    lines = plugin.panel.posted[-1]["lines"]
+    text = "\n".join(lines)
+    assert sum("slicing step posSlice reached" in line for line in lines) == 1
+    assert "check: 1 nut(s): 1 ok" in text
+    assert "export: started on" in text and "gcode_flavor='klipper'" in text
+    assert "export: success: 1 nut insert block(s) written." in text
+    assert "ERROR in export: FileNotFoundError" in text

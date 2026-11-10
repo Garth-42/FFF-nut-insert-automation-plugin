@@ -9,15 +9,20 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented and tested **at a desk**:
-86 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
-**The plugin itself has not run inside OrcaSlicer yet.** The probe has, and what it
-found is in [`docs/api-facts.md`](docs/api-facts.md).
+All seven milestones of the build brief are implemented. 88 tests pass on synthetic
+meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
+module.
 
-OrcaSlicer 2.5.0 asks for permission on every file a plugin opens, including the roughly
-120 files Python reads to load numpy. The plugin therefore asks once, when it is
-activated, for read access to Python's library folders. Answer Yes, then restart
-OrcaSlicer once. The remaining steps are in [`docs/manual-test.md`](docs/manual-test.md).
+In OrcaSlicer 2.5.0 (macOS) the check, the docked panel, the Nuts tab, the Modifier
+check and the notifications have been seen working on a real part. **The slice gate and
+the export step have not**: an export made with the plugin installed contained no insert
+block, and why is still being tracked down (see [`docs/api-facts.md`](docs/api-facts.md)).
+Run offline on that same file, the export logic writes the block correctly.
+
+OrcaSlicer asks for permission on every file a plugin opens, including the roughly 120
+files Python reads to load numpy. The plugin therefore asks once, when it is installed,
+for read access to Python's library folders. Answer Yes, then restart OrcaSlicer once.
+The manual checks are in [`docs/manual-test.md`](docs/manual-test.md).
 
 First-build limits: square nuts only, plate 1 only, print order by layer, no support
 material in pockets, and you set each nut body to Modifier by hand.
@@ -38,7 +43,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.1-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.2-py3-none-any.whl`.
 
 ## Try it without Orca
 

@@ -117,6 +117,11 @@ def notify(is_error: bool, message: str) -> None:
     orca.host.ui.push_notification(level, message)
 
 
+def notify_info(message: str) -> None:
+    orca.host.ui.push_notification(
+        orca.host.ui.NotificationLevel.RegularNotificationLevel, message)
+
+
 # --- Slicing context ------------------------------------------------------------------------
 
 def config_value(ctx, key):

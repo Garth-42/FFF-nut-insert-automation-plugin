@@ -73,10 +73,31 @@ the difference here and change only the `nut_inserter` package.
 | At post-process `ctx.print` is `None`; the model must not be read from a slicing step | `ctx.print.model()` is meant for exactly that | Not used yet |
 | Plate information is not available | `current_plate_index()` exists; per-object plate does not | Not used yet |
 
+## The first export (10 Nov 2026, wheel 0.2.0)
+
+`tests/data/sample.gcode` is the file Garth exported with the plugin installed, the nut
+set to Modifier and the report OK.
+
+- **It contains no insert block and no summary.** No slicing error and no prompt were
+  reported. So either the slicing capability was never called, or it failed silently.
+- **Its config block has a print setting `; plugins = ` that is empty**, next to
+  `; post_process = `. The likely reading: slicing-pipeline plugins are switched on per
+  process preset, like post-processing scripts, and "Nut insert" was not switched on.
+  Unconfirmed. Wheel 0.2.2 adds an Activity list to the panel that records every slicing
+  step that reaches the plugin, which settles it either way.
+- **Setting keys confirmed from the same block:** `gcode_flavor = klipper` and
+  `print_sequence = by layer`.
+- **Bed coordinates equal G-code coordinates on plate 1**: run offline, the export logic
+  finds the pocket at the reported X 164.706 Y 158.320, proves it empty, and writes the
+  block after the layer at Z 3.0 (`tests/test_gcode.py::test_real_sample_from_orca`).
+- The file has no `T<n>` line (single extruder), so `{tool}` renders as -1.
+- A notification cannot be closed by the plugin: `push_notification` returns nothing.
+
 ## Still open
 
 | Question | How it gets answered |
 | --- | --- |
+| Is the slicing capability called at all, and what switches it on? | Wheel 0.2.2: the panel's Activity list after a slice and an export |
 | What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | Probe: slice with it installed |
 | Does opening `ctx.gcode_path` raise a prompt? | Probe: export with it installed, or manual check D |
 | Does a grant need a restart to take effect? | Apparently yes (see above) |

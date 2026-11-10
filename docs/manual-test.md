@@ -28,7 +28,7 @@ uv build
 
   Result:
 
-- [ ] **A, Check nuts.** Remove the probe first, so only one plugin asks for permissions.
+- [x] **A, Check nuts.** Remove the probe first, so only one plugin asks for permissions.
   Install the wheel (0.2.1 or later). Expect **one** permission request for read access
   to folders under the OrcaSlicer app and its data folder; answer Yes. Expect a
   notification asking you to restart OrcaSlicer, and no other prompts. Restart.
@@ -37,11 +37,13 @@ uv build
   `E_NOT_MODIFIER`. Run Check nuts from the Plugins window and expect a result line with
   the nut count. Rotate the part 20 degrees about X and expect a warning notification.
 
-  Result so far (10 Nov 2026, wheel 0.2.0, install session): the panel docked, the check
-  ran from `on_load`, the nut was found as FLAT at X 164.706 Y 158.320 Z 1.900 with
-  `E_NOT_MODIFIER`, and the error notification appeared. The install session flooded
-  permission prompts, which 0.2.1 avoids. Still to do: the session after a restart, the
-  script action, and the rotation.
+  Result (10 Nov 2026, wheel 0.2.0): passed. The panel docked, the check ran on load,
+  the nut was found as FLAT at X 164.706 Y 158.320 Z 1.900 with `E_NOT_MODIFIER`, which
+  cleared after the body was set to Modifier. Rotating about X raised a notification and
+  undoing it cleared the finding. The install session flooded permission prompts and a
+  restart ended them; 0.2.1 avoids the flood. Notifications stay on screen after the
+  problem is fixed; 0.2.2 adds an "all clear". The script action from the Plugins window
+  was not tried.
 
 - [ ] **B, Panel.** Narrow the flat pocket width range until the test part fails, save,
   and see the error state the measured width. Restart Orca and confirm the change was
@@ -49,17 +51,25 @@ uv build
 
   Result:
 
-- [ ] **C, Preview.** Open the Nuts tab and find the part's edges, one box per pocket,
+- [x] **C, Preview.** Open the Nuts tab and find the part's edges, one box per pocket,
   and a crosshair at each placement point. Move the part in Prepare and confirm the tab
   follows.
 
-  Result:
+  Result (10 Nov 2026, wheel 0.2.0): the tab shows the part's edges, the pocket box, the
+  list and the detail (pocket 5.80 x 5.80 x 2.00 mm, insert window Z 2.900 to 3.000).
+  Moving the part and checking that the tab follows was not reported.
 
-- [ ] **D, Export.** With the nut body still a normal part, export and expect a slicing
-  error naming the nut. Set it to Modifier, export again, and find one insert block
-  after the last layer below the pocket roof, in your firmware's syntax.
+- [ ] **D, Export.** With wheel 0.2.2 or later. First look for where OrcaSlicer switches
+  slicing plugins on: the exported file's settings list a `plugins` entry next to
+  `post_process`, so look in the process settings near "Post-processing scripts", and in
+  the Plugins window for an enable switch on "Nut insert". Then slice and export, open
+  the panel's Activity section and press Refresh. It should list "slicing step posSlice
+  reached the plugin" and an "export:" line. With the nut body still a normal part,
+  expect the slice to be blocked naming the nut. Set it to Modifier, export again, and
+  find one insert block after the last layer below the pocket roof.
 
-  Result:
+  Result (10 Nov 2026, wheel 0.2.0): failed. The exported file had no insert block and no
+  error was shown. See "The first export" in `docs/api-facts.md`.
 
 - [ ] **Corner.** Repeat A and D with a part whose nut stands on a corner in a V slot.
 
