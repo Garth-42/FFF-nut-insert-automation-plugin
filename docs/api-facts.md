@@ -18,13 +18,13 @@ the difference here and change only the `nut_inserter` package.
 - **What the plugin asks for.** Read access to every entry of `sys.path`: Orca's bundled
   Python library and its plugin package folder (`<data>/python/packages/cp312`, where
   numpy 2.5.4 is installed). See `nut_inserter/permissions.py`.
-- **One flood remained, cause not settled.** In the session where the request was first
-  granted, `volume.matrix()` with numpy not yet imported flooded again. Either a grant
-  only takes effect after a restart, or an import that Orca triggers from inside a host
-  call is not matched against the grant (the prompt said the open "does not expose a
-  target the audit hook can display"). The plugin sidesteps both: it imports numpy
-  itself, from a capability method, before any host call that returns an array, and the
-  manual test says to restart Orca once after granting.
+- **One flood remained, in the session where the request was first granted.** There,
+  `volume.matrix()` with numpy not yet imported flooded again. In later sessions the same
+  step, and steps 1 to 8 in sequence, raised no prompts (reported by Garth). So the
+  likely explanation is that a grant takes effect from the next start of Orca. That is
+  an inference from three sessions, not something Orca documents. The manual test says to
+  restart Orca once after granting. The plugin also imports numpy itself, from a
+  capability method, before any host call that returns an array.
 - **Nothing that imports numpy may run while Orca loads the plugin module.** The request
   is shown only after `register_capabilities()` returns. A test enforces this.
 
@@ -79,5 +79,5 @@ the difference here and change only the `nut_inserter` package.
 | Do `create_dock_panel` in `on_load` and panel `post` work from a background thread? | Manual check A with the wheel |
 | What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | Probe: slice with it installed |
 | Does opening `ctx.gcode_path` raise a prompt? | Probe: export with it installed, or manual check D |
-| Does a grant need a restart to take effect? | Manual check A: note whether the first session prompts |
+| Does a grant need a restart to take effect? | Likely yes (see above). Manual check A: note whether the first session prompts |
 | How do bed coordinates map to G-code coordinates on plates after the first? | Not probed yet |
