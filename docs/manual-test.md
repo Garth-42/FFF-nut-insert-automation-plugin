@@ -21,8 +21,10 @@ folder (named after the old wheel file) from `orca_plugins`, or uninstall it in 
 Plugins window. Two versions at once share one Python package name and break each other.
 
 **Switch the slicing step on.** The check, panel and tab work as soon as the plugin is
-installed. The slice gate and the export step only run once "Nut insert" is enabled as a
-plugin in the process settings.
+installed. The slice gate and the export step only run once the plugin is added to the
+process preset: in the process settings find **Slicing pipeline plugin**, enable it, click
+**+ Add Plugin** and add Nut insert. The preset stores the wheel's file name, version
+included, so expect to add it again after installing a newer wheel.
 
 ## Checks
 
@@ -67,17 +69,16 @@ plugin in the process settings.
   list and the detail (pocket 5.80 x 5.80 x 2.00 mm, insert window Z 2.900 to 3.000).
   Moving the part and checking that the tab follows was not reported.
 
-- [ ] **D, Export.** With wheel 0.2.2 or later. First look for where OrcaSlicer switches
-  slicing plugins on: the exported file's settings list a `plugins` entry next to
-  `post_process`, so look in the process settings near "Post-processing scripts", and in
-  the Plugins window for an enable switch on "Nut insert". Then slice and export, open
-  the panel's Activity section and press Refresh. It should list "slicing step posSlice
-  reached the plugin" and an "export:" line. With the nut body still a normal part,
-  expect the slice to be blocked naming the nut. Set it to Modifier, export again, and
-  find one insert block after the last layer below the pocket roof.
+- [ ] **D, Export.** With the nut body still a normal part, slice and expect the slice to
+  be blocked naming the nut. Set it to Modifier, export again, and find one insert block
+  after the last layer below the pocket roof, in your firmware's syntax.
 
-  Result (10 Nov 2026, wheel 0.2.0): failed. The exported file had no insert block and no
-  error was shown. See "The first export" in `docs/api-facts.md`.
+  Result (10 Nov 2026): the second half passed with wheel 0.2.3. One block, Klipper
+  syntax, after the layer at Z 3.0 and before the layer change to Z 3.2; no permission
+  prompt. See "The first working export" in `docs/api-facts.md`. Earlier attempts: 0.2.0
+  wrote nothing because the plugin was not added to the process preset, then failed
+  because two versions were installed. Still to do: the first half, a slice with the nut
+  body still a normal part.
 
 - [ ] **Corner.** Repeat A and D with a part whose nut stands on a corner in a V slot.
 

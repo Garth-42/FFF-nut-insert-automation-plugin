@@ -13,16 +13,14 @@ All seven milestones of the build brief are implemented. 90 tests pass on synthe
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
-In OrcaSlicer 2.5.0 (macOS) the check, the docked panel, the Nuts tab, the Modifier
-check and the notifications have been seen working on a real part. **The slice gate and
-the export step have not**: an export made with the plugin installed contained no insert
-block, and why is still being tracked down (see [`docs/api-facts.md`](docs/api-facts.md)).
-Run offline on that same file, the export logic writes the block correctly.
-
-OrcaSlicer asks for permission on every file a plugin opens, including the roughly 120
-files Python reads to load numpy. The plugin therefore asks once, when it is installed,
-for read access to Python's library folders. Answer Yes, then restart OrcaSlicer once.
-The manual checks are in [`docs/manual-test.md`](docs/manual-test.md).
+In OrcaSlicer 2.5.0 (macOS) it has run end to end on one real part: a flat M3 square nut
+in a roofed pocket, Voron 2.4 profile, Klipper. The check, the docked panel, the Nuts
+tab, the Modifier check, the notifications and the export step all worked, and the
+exported file carries the insert block at the right layer. Not yet tried in Orca: nuts on
+edge or on a corner, open-top pockets, several nuts or copies, a slice blocked by an
+error, RepRapFirmware and Marlin output, and anything on a printer. What Orca's plugin
+API turned out to do is in [`docs/api-facts.md`](docs/api-facts.md); the manual checks
+and their results are in [`docs/manual-test.md`](docs/manual-test.md).
 
 First-build limits: square nuts only, plate 1 only, print order by layer, no support
 material in pockets, and you set each nut body to Modifier by hand.
@@ -63,14 +61,22 @@ uv run python -m nutcore.cli inject report.json in.gcode --firmware klipper
 ## Install into OrcaSlicer
 
 1. Build the wheel with `uv build`.
-2. In OrcaSlicer's data folder, make a folder under `orca_plugins`, for example
-   `orca_plugins/nut_inserter/`, and put the `.whl` in it as its only file. The Plugins
-   window also has "Install local plugin".
-3. Restart OrcaSlicer. Plugin output goes to the newest `python_*.log` in the data
-   folder's `log` directory.
+2. Remove any older copy first: delete its folder (named after the old wheel file) from
+   `orca_plugins` in OrcaSlicer's data folder. Two versions at once break each other.
+3. In the Plugins window choose "Install local plugin" and pick the `.whl`.
+4. OrcaSlicer shows **one permission request**, for read access to Python's library
+   folders inside the OrcaSlicer app and its data folder. Answer Yes. Without it, every
+   file Python opens to load numpy raises its own prompt, about 120 of them.
+5. A notice asks you to **restart OrcaSlicer once**. The permission only takes effect at
+   the next start, and the plugin does nothing until then.
+6. Add the plugin to your process preset: in the process settings find **Slicing pipeline
+   plugin**, enable it, click **+ Add Plugin** and add Nut insert. Without this the check,
+   panel and tab work, but the slice is not gated and nothing is written at export. The
+   preset stores the wheel's file name, so expect to repeat this after an update.
 
-Run the probe first (`probe/nut_api_probe.py`, installed the same way in its own
-folder). It settles what Orca's documentation leaves open. See `docs/manual-test.md`.
+If something does not happen, open the **Activity** section at the bottom of the Nut
+inserter panel. It lists each check, each slicing step that reached the plugin, the
+export result and any error.
 
 ## How you use it
 

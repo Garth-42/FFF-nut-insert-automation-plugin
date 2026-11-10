@@ -110,11 +110,38 @@ set to Modifier and the report OK.
   module object while `nut_inserter.state` stayed in `sys.modules`. Wheel 0.2.3 imports
   `state` in a way that survives this, but the real fix is to keep one copy installed.
 
+## The first working export (10 Nov 2026, wheel 0.2.3)
+
+With one copy of the plugin installed and "Nut insert" added under the process setting
+**Slicing pipeline plugin** (enable it, then "+ Add Plugin"), the exported file contained:
+
+```
+; HEADER_BLOCK_END
+; NUT_INSERT_SUMMARY firmware=klipper inserted=1 skipped=0
+; nut 1 NUT_M3SQ FLAT X164.706 Y158.320 Z1.900 after layer_z=3.000
+...
+G1 X111.068 Y125.165 E.05401
+;NUT_INSERT_BEGIN layer_z=3.000 count=1
+INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 Z_LOW=1.000 YAW=0.00 FEEDER=1 TOOL=-1
+;NUT_INSERT_END
+; stop printing object Configuration 1.step id:0 copy 0
+;LAYER_CHANGE
+;Z:3.2
+```
+
+- This is line for line what the export logic produced offline on the first file. Apart
+  from these lines the two exports differ only in the settings named below.
+- **No permission prompt at export.** Reading and writing `ctx.gcode_path` needs no grant.
+- **`ctx.config_value("gcode_flavor")` works**: firmware `auto` resolved to Klipper.
+- **How Orca stores the switch**: `slicing_pipeline_plugin = "Nut insert"` and
+  `plugins = "nut_inserter-0.2.3-py3-none-any;;Nut insert"`. The second names the wheel
+  file, version included. So after installing a newer wheel the plugin most likely has to
+  be added to the process preset again. Not yet observed.
+
 ## Still open
 
 | Question | How it gets answered |
 | --- | --- |
 | What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | Probe: slice with it installed |
-| Does opening `ctx.gcode_path` raise a prompt? | Probe: export with it installed, or manual check D |
 | Does a grant need a restart to take effect? | Apparently yes (see above) |
 | How do bed coordinates map to G-code coordinates on plates after the first? | Not probed yet |
