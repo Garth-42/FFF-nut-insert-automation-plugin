@@ -1,0 +1,28 @@
+[project]
+name = "nut-inserter"
+version = "0.1.0"
+description = "OrcaSlicer 2.5 plugin that finds NUT_ bodies, checks their pockets and writes nut-insert commands"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["numpy"]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nut_inserter", "src/nutcore"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "tests/fake_orca"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
