@@ -325,3 +325,42 @@ def test_activity_list_records_slicing_and_export(plugin, tmp_path):
     assert "export: started on" in text and "gcode_flavor='klipper'" in text
     assert "export: success: 1 nut insert block(s) written." in text
     assert "ERROR in export: FileNotFoundError" in text
+
+
+def test_plugin_survives_being_loaded_again(plugin):
+    """OrcaSlicer loaded the plugin module a second time when it was switched on for a
+    process preset. The new module object had no "state" attribute, and every call failed
+    with "cannot import name 'state' from 'nut_inserter'"."""
+    orca._fake.set_model(model())
+    plugin.check.execute()
+    first_report, first_panel = state.report, plugin.panel
+    plugin.tab.on_message({"type": "ready"})
+
+    del nut_inserter.state                       # what a second load leaves behind
+    plugin.check.on_unload()
+    plugin.tab.on_unload()
+    assert not first_panel.is_open() and state.tabs == []
+    check, tab, insert = nut_inserter.CheckNuts(), nut_inserter.NutsTab(), nut_inserter.NutInsert()
+    for cap in (check, tab, insert):
+        cap._saved = '{"activated": true}'
+        cap.on_load()
+
+    assert state.report is first_report          # the cached report was kept
+    assert len(orca._fake.panels) == 2 and orca._fake.panels[1].is_open()
+    assert state.config_owner is insert
+    assert insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice)).status == OK
+    tab.on_message({"type": "ready"})
+    assert types_of(tab.posted) == ["config", "report"]
+    assert check.execute().status == OK
+
+
+def test_a_dead_page_does_not_stop_the_others(plugin):
+    orca._fake.set_model(model())
+    plugin.tab.on_message({"type": "ready"})
+
+    def gone(payload):
+        raise RuntimeError("page was destroyed")
+
+    plugin.tab.post_message = gone
+    assert plugin.check.execute().status == OK
+    assert plugin.panel.posted[-1]["type"] == "report" and state.tabs == []

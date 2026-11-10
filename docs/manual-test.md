@@ -16,6 +16,14 @@ Build the wheel with:
 uv build
 ```
 
+**Keep one copy installed.** Before installing a new wheel, remove the old one: delete its
+folder (named after the old wheel file) from `orca_plugins`, or uninstall it in the
+Plugins window. Two versions at once share one Python package name and break each other.
+
+**Switch the slicing step on.** The check, panel and tab work as soon as the plugin is
+installed. The slice gate and the export step only run once "Nut insert" is enabled as a
+plugin in the process settings.
+
 ## Checks
 
 - [x] **Probe, model part.** Runs 1 to 6 are recorded in `docs/probe-log.txt` and

@@ -9,7 +9,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 88 tests pass on synthetic
+All seven milestones of the build brief are implemented. 90 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
@@ -43,7 +43,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.2-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.3-py3-none-any.whl`.
 
 ## Try it without Orca
 

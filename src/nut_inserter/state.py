@@ -240,16 +240,44 @@ def export(ctx):
 
 def open_panel(html: str) -> None:
     global panel
+    close_panel()                 # the plugin can be loaded twice in one session
     panel = adapter.create_panel(html, on_message=lambda data: guarded(on_panel_message, data),
                                  on_close=lambda *args: None)
 
 
+def close_panel() -> None:
+    global panel
+    old, panel = panel, None
+    if old is not None:
+        try:
+            if old.is_open():
+                old.close()
+        except Exception as exc:  # noqa: BLE001  a panel Orca already removed
+            note(f"old panel could not be closed: {exc!r}")
+
+
+def forget_tab(tab) -> None:
+    if tab in tabs:
+        tabs.remove(tab)
+
+
 def broadcast(payload: dict) -> None:
-    """Send a message to the panel and to every Nuts tab that is listening."""
+    """Send a message to the panel and to every Nuts tab that is listening.
+
+    A page that has gone away (the plugin was reloaded, a panel was closed) must
+    not stop the others from hearing.
+    """
     if panel is not None:
-        adapter.post_panel(panel, payload)
-    for tab in tabs:
-        adapter.post_tab(tab, payload)
+        try:
+            adapter.post_panel(panel, payload)
+        except Exception as exc:  # noqa: BLE001
+            note(f"panel did not take a message: {exc!r}")
+    for tab in list(tabs):
+        try:
+            adapter.post_tab(tab, payload)
+        except Exception as exc:  # noqa: BLE001
+            note(f"a Nuts tab did not take a message and was dropped: {exc!r}")
+            forget_tab(tab)
 
 
 def on_panel_message(data):

@@ -132,3 +132,9 @@ Each entry says what differs from the spec and why. Newest last.
     way to close a notification, so an error stayed on screen after it was fixed. When a
     check finds nothing wrong after one that did, the plugin raises a regular notification
     saying earlier nut messages no longer apply.
+37. **`state` is imported with `importlib.import_module`, not `from . import state`.** When
+    the package's module object is replaced (a second copy of the plugin, or Orca loading
+    it again), the from-import fails although `nut_inserter.state` is still loaded. The
+    one `state` module, and with it the cached report, is shared by every load.
+38. **`on_unload` closes the panel and forgets the tab, and `broadcast` skips pages that
+    no longer answer.** A second load would otherwise leave two panels and stale tabs.

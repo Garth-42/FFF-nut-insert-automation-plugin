@@ -12,6 +12,8 @@ about 120. The plugin asks once for read access to Python's library folders
 after Orca has shown that request.
 """
 
+import importlib
+
 import orca
 
 from . import permissions
@@ -48,7 +50,12 @@ def _call(name, *args):
         return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError,
                                             permissions.RESTART_NOTICE)
     try:
-        from . import state
+        # Not "from . import state": OrcaSlicer loads this module again when the plugin
+        # is switched on for a process preset. The new module object then lacks the
+        # "state" attribute while nut_inserter.state is still in sys.modules, and the
+        # from-import fails with "cannot import name 'state'". import_module returns
+        # the one state module either way, so the cached report survives a reload.
+        state = importlib.import_module(__name__ + ".state")
     except Exception as exc:  # noqa: BLE001  never crash the host
         print(f"Nut inserter could not start: {exc!r}")
         return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError,
@@ -63,6 +70,9 @@ class CheckNuts(orca.script.ScriptPluginCapabilityBase):
     def on_load(self):
         if _loaded(self):
             _call("open_panel", PANEL_HTML)
+
+    def on_unload(self):
+        _call("close_panel")
 
     def execute(self):
         return _call("check_action")
@@ -81,6 +91,9 @@ class NutsTab(orca.pages.PagesPluginCapabilityBase):
 
     def on_load(self):
         _loaded(self)
+
+    def on_unload(self):
+        _call("forget_tab", self)
 
     def on_message(self, data):
         if _setup_pending:

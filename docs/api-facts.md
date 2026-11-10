@@ -93,11 +93,27 @@ set to Modifier and the report OK.
 - The file has no `T<n>` line (single extruder), so `{tool}` renders as -1.
 - A notification cannot be closed by the plugin: `push_notification` returns nothing.
 
+## The second export attempt (10 Nov 2026)
+
+- **Slicing plugins are switched on per process preset.** Once Garth enabled "Nut
+  insert" in the slicer's settings, OrcaSlicer called the plugin at export. This is the
+  `plugins` print setting seen empty in the first exported file. Where exactly the
+  switch sits in the UI has not been written down yet.
+- **A failure from the export step is shown as a dialog**: "Orca Slicer error.
+  Post-processing plugin Nut insert failed. Error: <the message the plugin returned>".
+- **A wheel is unpacked next to itself**:
+  `<data>/orca_plugins/<wheel file name>/__whl_extracted__/nut_inserter/nut_inserter/__init__.py`.
+- **Two versions were installed at once** (0.2.0 and 0.2.2). The panel came from 0.2.2:
+  its Activity list showed checks of 6 to 14 ms and no slicing step. The export step ran
+  from 0.2.0 and failed with "cannot import name 'state' from 'nut_inserter'". Both
+  copies are the same Python package name, so the second one loaded replaced the first's
+  module object while `nut_inserter.state` stayed in `sys.modules`. Wheel 0.2.3 imports
+  `state` in a way that survives this, but the real fix is to keep one copy installed.
+
 ## Still open
 
 | Question | How it gets answered |
 | --- | --- |
-| Is the slicing capability called at all, and what switches it on? | Wheel 0.2.2: the panel's Activity list after a slice and an export |
 | What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | Probe: slice with it installed |
 | Does opening `ctx.gcode_path` raise a prompt? | Probe: export with it installed, or manual check D |
 | Does a grant need a restart to take effect? | Apparently yes (see above) |
