@@ -34,7 +34,7 @@ these is used yet (rule 2).
 
 | Question | Answer |
 | --- | --- |
-| What raised the 99 permission prompts: `print()` or the numpy import? | pending: step 2 of the probe |
+| What raised the 99 permission prompts? | Reading the model or its meshes, not `print()`: probe 0.4.0 prints nothing and step 2 flooded again. The prompt names no file ("does not expose a target the audit hook can display") and offers only Yes or No, with no way to remember the answer. Which call, and whether it is the numpy import, is pending: probe 0.5.0 step 3 |
 | May a slicing step read the model from its worker thread? | pending |
 | How do bed coordinates map to G-code coordinates on plates after the first? | pending |
 | Setting keys for G-code flavor and print order, and their values | pending |

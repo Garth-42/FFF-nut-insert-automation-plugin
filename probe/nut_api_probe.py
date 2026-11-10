@@ -6,7 +6,7 @@
 # name = "Nut API probe"
 # description = "Shows what the plugin API exposes. Changes nothing, opens no files."
 # author = "nut-inserter"
-# version = "0.4.0"
+# version = "0.5.0"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
@@ -16,6 +16,7 @@ print() appears to count. Everything is kept in memory instead and shown in
 the "Nut probe" tab, where you can copy it. See docs/manual-test.md.
 """
 
+import sys
 import threading
 
 import orca
@@ -52,6 +53,24 @@ def safe(label, fn):
         log(label, "=", fn())
     except Exception as exc:  # noqa: BLE001
         log(label, "FAILED", repr(exc))
+
+
+def modules_step(label, fn):
+    """Run fn and record which Python modules it caused to be imported.
+
+    Importing a module opens files, and Orca prompts for each one, so this
+    shows which call is behind a flood of prompts. It opens nothing itself.
+    """
+    before = set(sys.modules)
+    log(">>", label, "| numpy loaded before:", "numpy" in before)
+    try:
+        value = fn()
+    except Exception as exc:  # noqa: BLE001
+        log_error(label, exc)
+        value = None
+    new = sorted(set(sys.modules) - before)
+    log("<<", label, "| new modules:", len(new), new[:40])
+    return value
 
 
 def names(obj):
@@ -111,8 +130,8 @@ def dump_docs():
             log("doc", cls, "FAILED", repr(exc))
 
 
-def dump_model(where):
-    """Record everything readable about the model. Used from several threads."""
+def dump_model(where, with_mesh=False):
+    """Record names, matrices and types. Meshes only on request: they need numpy."""
     log("== model from", where, "thread", thread_name(), "==")
     try:
         objects = list(orca.host.model().objects())
@@ -128,33 +147,44 @@ def dump_model(where):
                 log("dir object =", names(obj))
                 if volumes:
                     log("dir volume =", names(volumes[0]))
-                    safe("dir mesh", lambda v=volumes[0]: names(v.mesh()))
                 if instances:
                     log("dir instance =", names(instances[0]))
             log("object", oi, "volumes", len(volumes), "instances", len(instances))
             for vi, vol in enumerate(volumes):
                 log("object", oi, "volume", vi, "name =", repr(vol.name))
+                if oi == 0 and vi == 0:
+                    modules_step("vol.matrix()", lambda v=vol: log("  matrix type",
+                                                                   type(v.matrix()).__name__))
                 safe("  volume matrix", lambda v=vol: v.matrix().tolist())
                 # Part type is not documented. Record anything that looks like it.
                 for attr in names(vol):
                     if "type" in attr.lower() or "modifier" in attr.lower():
                         safe(f"  volume.{attr}", lambda v=vol, a=attr: _value(getattr(v, a)))
-                try:
-                    mesh = vol.mesh()
-                    verts = mesh.vertices()
-                    tris = mesh.triangles()
-                    log("  vertices", verts.shape, verts.dtype, "triangles", tris.shape,
-                        tris.dtype)
-                    safe("  vertices writeable", lambda v=verts: bool(v.flags.writeable))
-                    safe("  bounds", lambda v=verts: (v.min(axis=0).tolist(),
-                                                      v.max(axis=0).tolist()))
-                except Exception as exc:  # noqa: BLE001
-                    log_error("  mesh", exc)
+                if with_mesh and oi == 0 and vi == 0:
+                    dump_mesh(vol)
             for ii, inst in enumerate(instances):
                 safe(f"object {oi} instance {ii} matrix", lambda i=inst: i.matrix().tolist())
                 safe(f"object {oi} instance {ii} left handed", lambda i=inst: i.is_left_handed())
         except Exception as exc:  # noqa: BLE001
             log_error(f"object {oi}", exc)
+
+
+def dump_mesh(vol):
+    """One call at a time, so the log shows which one imports modules or fails."""
+    mesh = modules_step("vol.mesh()", vol.mesh)
+    if mesh is None:
+        return
+    safe("dir mesh", lambda: names(mesh))
+    verts = modules_step("mesh.vertices()", mesh.vertices)
+    tris = modules_step("mesh.triangles()", mesh.triangles)
+    if verts is not None:
+        safe("vertices type", lambda: type(verts).__name__)
+        safe("vertices shape dtype", lambda: (verts.shape, str(verts.dtype)))
+        safe("vertices writeable", lambda: bool(verts.flags.writeable))
+        modules_step("verts.min/max", lambda: log("bounds =", verts.min(axis=0).tolist(),
+                                                  verts.max(axis=0).tolist()))
+    if tris is not None:
+        safe("triangles shape dtype", lambda: (tris.shape, str(tris.dtype)))
 
 
 def _value(attr):
@@ -215,18 +245,35 @@ class ProbeApi(orca.script.ScriptPluginCapabilityBase):
 
 
 class ProbeModel(orca.script.ScriptPluginCapabilityBase):
-    """Step 2: the model and its meshes. This is the step that needs numpy."""
+    """Step 2: names, matrices and types. No meshes."""
 
     def get_name(self):
-        return "Nut API probe: 2 model"
+        return "Nut API probe: 2 model, no meshes"
 
     def execute(self):
         try:
             log("script 2 execute, thread", thread_name())
-            dump_model("script")
+            modules_step("whole step 2", lambda: dump_model("script"))
             return result("Model recorded.")
         except Exception as exc:  # noqa: BLE001
             log_error("script 2", exc)
+            return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
+
+
+class ProbeMesh(orca.script.ScriptPluginCapabilityBase):
+    """Step 3: one mesh, one call at a time. In 2.5.0 this is where prompts flooded."""
+
+    def get_name(self):
+        return "Nut API probe: 3 mesh (may prompt)"
+
+    def execute(self):
+        try:
+            log("script 3 execute, thread", thread_name())
+            volume = orca.host.model().objects()[0].volumes()[0]
+            dump_mesh(volume)
+            return result("Mesh recorded.")
+        except Exception as exc:  # noqa: BLE001
+            log_error("script 3", exc)
             return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
 
 
@@ -334,7 +381,7 @@ class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
                 dump_ctx(ctx)
                 for key in ("gcode_flavor", "print_sequence", "printable_area", "layer_height"):
                     safe(f"config_value {key}", lambda k=key: repr(ctx.config_value(k)))
-                dump_model(f"slicing step {step}")
+                dump_model(f"slicing step {step}")   # no meshes
                 if step == orca.slicing.Step.psGCodePostProcess:
                     log("gcode_path =", repr(ctx.gcode_path))
                     if READ_GCODE:
@@ -356,5 +403,6 @@ class NutApiProbe(orca.base):
     def register_capabilities(self):
         orca.register_capability(ProbeApi)
         orca.register_capability(ProbeModel)
+        orca.register_capability(ProbeMesh)
         orca.register_capability(ProbePage)
         orca.register_capability(ProbeSlicing)

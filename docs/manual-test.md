@@ -23,12 +23,15 @@ uv build
   prompt. Its output is shown in its own tab instead.
 
   1. Open a project with a two-body STEP: a part plus `NUT_M3SQ`.
-  2. Run "Nut API probe: 1 API" from the Plugins window. Note whether any prompt appears.
-  3. Run "Nut API probe: 2 model". Note whether any prompt appears.
+  2. Run "Nut API probe: 1 API" from the Plugins window.
+  3. Run "Nut API probe: 2 model, no meshes".
   4. Move the object, slice, and export G-code.
   5. Open the "Nut probe" tab, press Refresh, Select all, copy, and save the text as
      `docs/probe-log.txt`.
   6. Save the exported G-code file as `tests/data/sample.gcode`.
+  7. Last, and only when asked: run "Nut API probe: 3 mesh (may prompt)". In 2.5.0
+     reading a mesh raised about a hundred permission prompts. Refresh the tab afterwards
+     and copy the text again.
 
   Then fill `docs/api-facts.md` from the lines that start with `NUTPROBE`.
 
