@@ -257,3 +257,18 @@ def test_real_sample_from_orca():
     record.box = dict(record.box, centre=[150.0, 150.0, 2.0])
     solid = run(text, Report(nuts=[record]), firmware="klipper")
     assert solid.status == "failure" and "E_POCKET_NOT_EMPTY" in export_codes(solid)
+
+
+def test_klipper_dry_run_macro_reads_every_value_the_template_sends():
+    """macros/klipper/insert_nut_dry_run.cfg must stay in step with the Klipper template."""
+    import re
+    from pathlib import Path
+
+    template = library.default_config()["settings"]["templates"]["klipper"]
+    command, *pairs = template.split()
+    sent = {pair.split("=")[0] for pair in pairs}
+    macro = (Path(__file__).parents[1] / "macros" / "klipper" /
+             "insert_nut_dry_run.cfg").read_text()
+    assert f"[gcode_macro {command}]" in macro
+    read = set(re.findall(r"params\.([A-Z_]+)", macro))
+    assert sent == read == {"KEY", "CLASS", "X", "Y", "Z", "Z_LOW", "YAW", "FEEDER", "TOOL"}
