@@ -220,3 +220,41 @@ NUTPROBE   -> array([[  1.        ,   0.        ,   0.        , 150.        ],
        [  0.        ,   1.        ,   0.        , 150.        ],
        [  0.        ,   0.        ,   1.        ,   6.11100006],
        [  0.        ,   0.        ,   0.        ,   1.        ]])
+
+## Run 6, 10 Nov 2026: probe 0.7.0 (asks for read access to the sys.path folders at load)
+
+Reported by Garth: activating the probe showed one permission request. In that same
+session steps 1 to 4 were run and step 4 (volume.matrix(), with numpy not yet imported)
+flooded prompts again. After a force quit and restart, only steps 5 to 8 were run: no
+prompts at all. Slicing and export were not run.
+
+NUTPROBE request_permissions fs_read = ['<data>/orca_plugins/nut_api_probe.py', '<data>/python/packages/cp312/*', '<app>/Contents/MacOS/python/lib/python312.zip', '<app>/Contents/MacOS/python/lib/python3.12/*', '<app>/Contents/MacOS/python/lib/python3.12/lib-dynload/*', '<app>/Contents/MacOS/python/lib/python3.12/site-packages/*']
+NUTPROBE on_load, thread Dummy-1
+NUTPROBE script 5 numpy thread Dummy-2
+NUTPROBE call numpy already loaded
+NUTPROBE   -> False
+NUTPROBE call import numpy
+NUTPROBE   -> <module 'numpy' from '<data>/python/packages/cp312/numpy/__init__.py'>
+NUTPROBE   -> imported 122 modules: ['_ast', '_compat_pickle', ..., 'numpy', 'numpy.__config__', 'numpy._array_api_info', 'numpy._core']
+NUTPROBE call numpy.__version__
+NUTPROBE   -> '2.5.4'
+NUTPROBE script 6 mesh arrays thread Dummy-2
+NUTPROBE call volume.mesh()
+NUTPROBE   -> <orca.host.TriangleMesh object at 0x13281f970>
+NUTPROBE call mesh.vertices()            -> array([[ 0.10793686, -1.1702719 ,  0.10680413], ...
+NUTPROBE call mesh.triangles()           -> array([[   0,    1,    2], ..., shape=(5818, 3), dtype=int32)
+NUTPROBE call mesh.face_normals()        -> array([[-4.6001788e-02,  9.9894136e-01,  0.0000000e+00], ...
+NUTPROBE call vertices shape, dtype, writeable
+NUTPROBE   -> ((2909, 3), 'float32', False)
+NUTPROBE call vertices bounds
+NUTPROBE   -> ([-2.75, -2.7500009536743164, -0.8999999761581421], [2.75, 2.7500009536743164, 0.8999999761581421])
+NUTPROBE call triangles shape, dtype
+NUTPROBE   -> ((5818, 3), 'int32')
+NUTPROBE script 7 print thread Dummy-2
+NUTPROBE call print()
+NUTPROBE   -> None
+NUTPROBE script 8 ui thread Dummy-3
+NUTPROBE call push_notification
+NUTPROBE   -> None
+NUTPROBE call app_info
+NUTPROBE   -> FAILED RuntimeError('app_info() must be called from the UI thread')

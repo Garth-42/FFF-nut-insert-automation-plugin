@@ -5,7 +5,6 @@ module means a change in Orca is a change in this file only.
 """
 
 import json
-import sys
 
 import numpy as np
 import orca
@@ -21,34 +20,6 @@ from nutcore.mesh import (
 # Whether pages receive a JSON string or an object is not documented. The probe
 # (milestone 0) logs it. The pages accept both, so this only changes what is sent.
 POST_AS_JSON_STRING = False
-
-
-# --- Permissions ----------------------------------------------------------------------------
-
-def permission_targets() -> list[str]:
-    """Read access to Python's own library folders: everything on sys.path.
-
-    OrcaSlicer asks for permission each time a plugin opens a file, and that
-    includes the files Python reads to import a module. The first numpy use
-    imports about 120 modules, which was 120 prompts in a row (docs/api-facts.md).
-    A target ending in "/*" grants a whole folder tree.
-    """
-    targets = []
-    for entry in sys.path:
-        entry = entry.rstrip("/\\")
-        if not entry:
-            continue
-        is_file = entry.lower().endswith((".zip", ".py", ".whl", ".egg"))
-        targets.append(entry if is_file else entry + "/*")
-    return targets
-
-
-def request_permissions() -> None:
-    """Ask once, while Orca loads the plugin. Orca shows one request for all targets."""
-    try:
-        orca.request_permissions(fs_read=permission_targets())
-    except Exception as exc:  # noqa: BLE001  an older Orca without the call still loads
-        print(f"Nut inserter: request_permissions failed: {exc!r}")
 
 
 # --- Model ----------------------------------------------------------------------------------

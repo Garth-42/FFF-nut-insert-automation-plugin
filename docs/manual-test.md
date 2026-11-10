@@ -18,29 +18,26 @@ uv build
 
 ## Checks
 
-- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.7.0 or later). Its output is
-  shown in the "Nut probe" tab; it prints nothing unless you run step 7.
+- [x] **Probe, model part.** Runs 1 to 6 are recorded in `docs/probe-log.txt` and
+  summarised in `docs/api-facts.md`. With the permission request granted, importing numpy
+  and reading meshes raise no prompts.
 
-  Runs 1 to 5 are done and recorded in `docs/probe-log.txt`. They showed that importing
-  numpy raised about 120 permission prompts. Probe 0.7.0 asks Orca once, while it loads,
-  for read access to Python's library folders. What is left:
-
-  1. Install 0.7.0 and restart Orca. Expect **one** permission request listing folders
-     under the OrcaSlicer app and its data folder. Answer Yes.
-  2. Open the project with the part and `NUT_M3SQ`.
-  3. Run "Nut probe 5: import numpy (may prompt)". No prompt, or a flood? If it floods,
-     stop here and report.
-  4. Run "Nut probe 6: mesh arrays", "7: print test" and "8: notification test". Note
-     any prompt, and whether a notification appeared in the 3D view.
-  5. Slice and export G-code. Note any prompt.
-  6. Open the "Nut probe" tab, press Refresh, Select all, copy, and append the text to
-     `docs/probe-log.txt`. Save the exported file as `tests/data/sample.gcode`.
+- [ ] **Probe, slicing part.** With probe 0.7.0 installed, slice and export G-code. Note
+  any prompt. Open the "Nut probe" tab, press Refresh, copy the text and append it to
+  `docs/probe-log.txt`. Save the exported file as `tests/data/sample.gcode`.
 
   Result:
 
-- [ ] **A, Check nuts.** Install the wheel and run Check nuts from the Plugins window.
-  Expect a result line with the nut count. Rotate the part 20° about X and expect a
-  warning notification.
+- [ ] **A, Check nuts.** Remove the probe first, so only one plugin asks for permissions.
+  Install the wheel. Expect **one** permission request for read access to folders under
+  the OrcaSlicer app and its data folder; answer Yes, then restart OrcaSlicer once.
+  Open the project. Expect the Nut inserter panel docked on the right, no prompts, and a
+  report listing the nut. With the nut body still a normal part, expect the error
+  `E_NOT_MODIFIER`. Run Check nuts from the Plugins window and expect a result line with
+  the nut count. Rotate the part 20 degrees about X and expect a warning notification.
+
+  If the panel is missing or stays empty, that is a finding: note it and say whether the
+  Nuts tab works.
 
   Result:
 

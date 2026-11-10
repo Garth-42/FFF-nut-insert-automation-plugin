@@ -10,13 +10,14 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 ## Status
 
 All seven milestones of the build brief are implemented and tested **at a desk**:
-84 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
+85 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
 **The plugin itself has not run inside OrcaSlicer yet.** The probe has, and what it
-found is in [`docs/api-facts.md`](docs/api-facts.md). The main finding: OrcaSlicer 2.5.0
-asks for permission on every file a plugin opens, including the roughly 120 files Python
-reads to load numpy. The plugin now asks once, at load, for read access to Python's
-library folders; whether that stops the prompts is the next thing to test. The steps
-are in [`docs/manual-test.md`](docs/manual-test.md).
+found is in [`docs/api-facts.md`](docs/api-facts.md).
+
+OrcaSlicer 2.5.0 asks for permission on every file a plugin opens, including the roughly
+120 files Python reads to load numpy. The plugin therefore asks once, when it is
+activated, for read access to Python's library folders. Answer Yes, then restart
+OrcaSlicer once. The remaining steps are in [`docs/manual-test.md`](docs/manual-test.md).
 
 First-build limits: square nuts only, plate 1 only, print order by layer, no support
 material in pockets, and you set each nut body to Modifier by hand.
@@ -37,7 +38,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.1.0-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.0-py3-none-any.whl`.
 
 ## Try it without Orca
 

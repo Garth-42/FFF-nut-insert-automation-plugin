@@ -1,6 +1,8 @@
-"""Test helpers for the stand-in orca module. Not part of the real API."""
+"""Test helpers for the stand-in orca module. Not part of the real API.
 
-import numpy as np
+numpy is imported only when a model is built, so a test can check that loading the
+plugin does not import it.
+"""
 
 plugin_classes = []
 registered = []
@@ -12,6 +14,8 @@ in_slicing_step = False   # set by tests; orca.host.ui then refuses calls, like 
 
 class Mesh:
     def __init__(self, vertices, triangles):
+        import numpy as np
+
         self._v = np.asarray(vertices, dtype=np.float32)
         self._t = np.asarray(triangles, dtype=np.int32)
         self._v.flags.writeable = False
@@ -28,6 +32,8 @@ class Volume:
     def __init__(self, name, vertices, triangles, matrix, kind="part"):
         self.name = name
         self.kind = kind
+        import numpy as np
+
         self._mesh = Mesh(vertices, triangles)
         self._matrix = np.asarray(matrix, dtype=np.float64)
 
@@ -46,6 +52,8 @@ class Volume:
 
 class Instance:
     def __init__(self, matrix, left_handed=False):
+        import numpy as np
+
         self._matrix = np.asarray(matrix, dtype=np.float64)
         self._left = left_handed
 

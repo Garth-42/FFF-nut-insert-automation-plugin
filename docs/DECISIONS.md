@@ -111,3 +111,9 @@ Each entry says what differs from the spec and why. Newest last.
 32. **The probe prints nothing and shows its output in its own tab.** It no longer
     matches the spec's "prints lines prefixed NUTPROBE", because reading a log file was
     not possible: no `python_*.log` was found.
+33. **The plugin module loads without numpy.** `nut_inserter/__init__.py` no longer
+    imports `state`, `adapter` or anything else that needs numpy at module level, unlike
+    the spec's skeleton. Each capability method imports `state` when it is called. Orca
+    shows the permission request only after the module has loaded, and importing numpy
+    before that would raise about 120 prompts. The permission code lives in the
+    numpy-free `permissions.py`.

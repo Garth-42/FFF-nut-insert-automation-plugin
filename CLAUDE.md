@@ -22,6 +22,10 @@ Deviations from it are logged in `docs/DECISIONS.md`.
 8. Commit after each milestone with its checks passing. Log every deviation from the spec, and
    the reason, in `docs/DECISIONS.md`.
 
+9. Nothing that imports numpy may run while Orca loads `nut_inserter/__init__.py`. Orca asks
+   for permission on every file a plugin opens until `permissions.request()` is granted, which
+   happens after the module has loaded. Import `state` inside capability methods only.
+
 ## Commands
 
 - `uv run pytest -q` runs the tests.

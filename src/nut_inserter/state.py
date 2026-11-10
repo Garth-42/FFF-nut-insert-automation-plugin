@@ -48,6 +48,11 @@ def guarded(fn, *args):
         return adapter.failure(str(exc))
 
 
+def set_config_owner(owner) -> None:
+    global config_owner
+    config_owner = owner
+
+
 # --- Settings -------------------------------------------------------------------------------
 
 def read_config() -> tuple[dict, str | None]:

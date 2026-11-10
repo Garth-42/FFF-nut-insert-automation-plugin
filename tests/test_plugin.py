@@ -8,7 +8,7 @@ import pytest
 
 import nut_inserter
 from builders import gcode_ring, nut, pocket_block, snapshot
-from nut_inserter import adapter, state
+from nut_inserter import adapter, permissions, state
 from nutcore import library
 from nutcore.mesh import rotation, translation
 
@@ -233,7 +233,7 @@ def test_only_the_plugin_package_imports_orca():
 def test_permissions_are_requested_once_at_load():
     (request,) = orca._fake.permission_requests
     assert request["fs_readwrite"] == []
-    assert request["fs_read"] == adapter.permission_targets()
+    assert request["fs_read"] == permissions.targets()
     assert all(t.endswith(("/*", ".zip", ".py", ".whl", ".egg")) for t in request["fs_read"])
 
 
@@ -246,3 +246,20 @@ def test_nut_body_left_as_a_printing_part_blocks_the_slice(plugin):
     assert [f.code for f in state.report.nuts[0].findings] == ["E_NOT_MODIFIER"]
     result = plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice))
     assert result.status == FAIL and "Change type, Modifier" in result.message
+
+
+def test_loading_the_plugin_does_not_import_numpy():
+    """Orca prompts per opened file until the permission request is granted, so numpy
+    must not be imported while the plugin module loads."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).parent
+    paths = [str(root / "fake_orca"), str(root.parent / "src")]
+    code = (f"import sys; sys.path[:0] = {paths!r}; import nut_inserter; "
+            "nut_inserter.NutInserterPlugin().register_capabilities(); "
+            "nut_inserter.NutInsert().get_default_config(); "
+            "assert 'numpy' not in sys.modules, 'numpy was imported at load'")
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
