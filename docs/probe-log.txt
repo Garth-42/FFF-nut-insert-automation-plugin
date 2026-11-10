@@ -71,3 +71,37 @@ NUTPROBE doc orca.host.Plater.project_path = project_path(self: orca.host.Plater
 - The prompt reads: Plugin "Nut API probe" is requesting permission for the Python audit
   event "open". This operation does not expose a target the audit hook can display.
   Buttons: Yes, No.
+
+## Run 3, 10 Nov 2026: probe 0.6.0
+
+Steps 1 and 2 ran, but their output was lost: the tab was cleared and the probe then
+refused to record a step twice (a probe bug, fixed in 0.6.1). No prompts were reported
+for steps 1 to 3. Step 4 (transforms) raised the prompt flood; its output was not
+retrieved.
+
+NUTPROBE script 3 mesh plain thread Dummy-4
+NUTPROBE == mesh, plain accessors, thread Dummy-4 ==
+NUTPROBE call volume.mesh()
+NUTPROBE   -> <orca.host.TriangleMesh object at 0x140fc4470>
+NUTPROBE call mesh.vertex_count
+NUTPROBE   -> 2909
+NUTPROBE call mesh.triangle_count
+NUTPROBE   -> 5818
+NUTPROBE call mesh.facets_count
+NUTPROBE   -> 5818
+NUTPROBE call mesh.is_empty
+NUTPROBE   -> False
+NUTPROBE call mesh.volume
+NUTPROBE   -> 42.894447326660156
+NUTPROBE call mesh.bounding_box
+NUTPROBE   -> <orca.host.BoundingBox object at 0x140fc78f0>
+NUTPROBE call mesh.vertex(0)
+NUTPROBE   -> (0.10793685913085938, -1.170271873474121, 0.10680413246154785)
+NUTPROBE call type(mesh.vertex(0))
+NUTPROBE   -> 'tuple'
+NUTPROBE call list(mesh.vertex(0))
+NUTPROBE   -> [0.10793685913085938, -1.170271873474121, 0.10680413246154785]
+NUTPROBE call mesh.triangle(0)
+NUTPROBE   -> (0, 1, 2)
+NUTPROBE call type(mesh.triangle(0))
+NUTPROBE   -> 'tuple'

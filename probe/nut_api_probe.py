@@ -6,7 +6,7 @@
 # name = "Nut API probe"
 # description = "Shows what the plugin API exposes. Changes nothing, opens no files."
 # author = "nut-inserter"
-# version = "0.6.0"
+# version = "0.6.1"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
@@ -28,7 +28,6 @@ MAX_PER_EVENT = 2      # keep each kind of lifecycle event this many times
 MAX_LINES = 4000
 
 LINES = []             # the probe's whole output, in memory
-DONE = set()           # sections already recorded, so a second run adds nothing
 
 
 def log(*parts):
@@ -190,6 +189,8 @@ def dump_mesh_plain():
 
 def dump_numpy():
     log("== import numpy, thread", thread_name(), "==")
+    step("numpy already loaded", lambda: "numpy" in sys.modules)
+    step("sys.path", lambda: list(sys.path))
     numpy = step("import numpy", lambda: __import__("numpy"))
     if numpy is not None:
         step("numpy.__version__", lambda: numpy.__version__)
@@ -229,14 +230,10 @@ def dump_ctx(ctx):
 
 
 def run_script(name, fn):
-    """Body of every script action: run once, never raise."""
+    """Body of every script action. Never raises."""
     try:
         log("script", name, "thread", thread_name())
-        if name in DONE:
-            log("script", name, "already recorded")
-        else:
-            DONE.add(name)
-            fn()
+        fn()
         return orca.ExecutionResult.success(
             name + " recorded. Open the Nut probe tab, press Refresh and copy the output.")
     except Exception as exc:  # noqa: BLE001

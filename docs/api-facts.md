@@ -27,7 +27,7 @@ called it in Orca; until then it is not used in the plugin (rule 2).
 | `ModelVolume.type()` | `-> ModelVolumeType` (`ModelPart`, `ParameterModifier`, `NegativeVolume`, ...) | A part's type is readable | no |
 | `ModelVolume.is_modifier()`, `is_model_part()` | `-> bool` | The Modifier step can be checked directly instead of from the G-code | no |
 | `Model.current_plate_index()` | `-> int` | The selected plate. Which plate an object is on is still not exposed | no |
-| `TriangleMesh.vertex(i)`, `triangle(i)`, `vertex_count`, `triangle_count`, `bounding_box` | unknown | A way to read a mesh that may not need numpy arrays | no |
+| `TriangleMesh.vertex(i)`, `triangle(i)`, `vertex_count()`, `triangle_count()`, `volume()` | `vertex(i) -> (x, y, z)` tuple of floats, `triangle(i) -> (a, b, c)` tuple of ints | Reads a mesh without numpy arrays and without prompts | **yes** (run 3) |
 | `ModelVolume` / `ModelInstance` `.offset`, `.rotation`, `.scaling_factor`, `.mirror` | unknown | Transforms that may not need numpy arrays | no |
 | `Print.objects`, `PrintObject.layers`, `Layer.print_z`, `slice_z`, `lslices` | unknown | Sliced layers may be readable in a slicing step: layer heights and pocket outlines without parsing G-code | no |
 | `orca.host.plater()` | `-> Plater` with `project_path()`, `is_project_dirty()`, `export_3mf_copy(path)` | Project path | no |
@@ -43,7 +43,7 @@ a script action gets a new background thread (`Dummy-2`, `Dummy-3`).
 
 | Question | Answer |
 | --- | --- |
-| Which call raises the permission flood? | Reading names and matrices is enough (probe 0.5.0 step 2), so it is not only meshes. Matrices come back as numpy arrays, which fits "the first numpy use imports numpy, one prompt per file", but that is not proven. Probe 0.6.0 logs each call before making it |
+| Which call raises the permission flood? | Something in the transform calls of probe 0.6.0 step 4 (`bounding_box`, `scaling_factor`, `mirror`, `offset`, `rotation`, `matrix`). Names, types and point-by-point mesh reads raise none. Which call exactly, and whether it is the numpy import, is pending: step 4 output |
 | Can `request_permissions` stop the flood, and with which paths? | pending: full docstring in probe 0.6.0 step 1 |
 | May a slicing step read the model from its worker thread? | pending |
 | How do bed coordinates map to G-code coordinates on plates after the first? | pending |
