@@ -44,9 +44,9 @@ def merge(meshes) -> Mesh:
     return Mesh(np.concatenate(vertices), np.concatenate(triangles).astype(np.int32))
 
 
-def part(name: str, mesh: Mesh, matrix=None) -> PartSnapshot:
+def part(name: str, mesh: Mesh, matrix=None, kind="unknown") -> PartSnapshot:
     return PartSnapshot(name=name, vertices=mesh.vertices, triangles=mesh.triangles,
-                        matrix=np.eye(4) if matrix is None else matrix)
+                        matrix=np.eye(4) if matrix is None else matrix, kind=kind)
 
 
 def nut(key="M3SQ", centre=(0, 0, 0), rot=None, name=None, size=None) -> PartSnapshot:

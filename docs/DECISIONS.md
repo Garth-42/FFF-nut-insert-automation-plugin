@@ -89,3 +89,25 @@ Each entry says what differs from the spec and why. Newest last.
     a test file is not lost. The Orca export step edits in place, as the spec says.
 27. **Arcs in R form** are read as a straight move; only I, J arcs are split. Orca writes
     I, J arcs.
+
+## After the first probe runs in OrcaSlicer 2.5.0 (10 Nov 2026)
+
+28. **`orca.request_permissions` is called at module load**, for read access to every
+    entry of `sys.path`. This call is not in the spec's API table; it comes from the probe
+    log (rule 3). Without it the first numpy use raises about 120 permission prompts. The
+    grant covers Orca's bundled Python library and its plugin package folder, read-only.
+29. **A part's type is read, and a nut body that still prints is `E_NOT_MODIFIER`.** The
+    spec says the type cannot be read; the probe showed `is_modifier()` works. The error
+    blocks the slice with the fix in the message, instead of surfacing only at export.
+    The pocket proof at export stays.
+30. **`PartSnapshot` gained `kind`**: "part", "modifier", "other" or "unknown". Parts of
+    kind "modifier" or "other" are not walls any more, which removes the spec's risk "a
+    non-nut modifier that overlaps a pocket would be measured as a wall". Snapshots built
+    without a kind (tests, the command line) behave as before.
+31. **The nut frame takes the three largest perpendicular faces directly**, and only the
+    40 largest face directions are grouped. The real `NUT_M3SQ` body has 5,818 triangles
+    from its threaded hole; merging every facet direction was needless work inside the
+    100 ms budget.
+32. **The probe prints nothing and shows its output in its own tab.** It no longer
+    matches the spec's "prints lines prefixed NUTPROBE", because reading a log file was
+    not possible: no `python_*.log` was found.

@@ -11,7 +11,7 @@ from .mesh import normals_and_areas
 PLANE_ANGLE_TOL = 0.5    # degrees
 PLANE_OFFSET_TOL = 0.01  # mm
 MIN_AREA = 1e-9          # mm^2, smaller triangles are dropped
-MAX_DIRECTIONS = 500     # a nut body has a handful; stop on meshes that are clearly not nuts
+MAX_DIRECTIONS = 40      # the largest faces are found first; a nut frame needs only six
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,10 @@ class FlatFace:
 
 def flat_faces(vertices, triangles, angle_tol_deg: float = PLANE_ANGLE_TOL,
                offset_tol: float = PLANE_OFFSET_TOL) -> list[FlatFace]:
-    """Return the flat faces of a mesh, largest first.
+    """Return the largest flat faces of a mesh, largest first.
+
+    Only the MAX_DIRECTIONS largest directions are grouped. A real nut model has
+    thousands of small facets in its threaded hole, and none of them matter here.
 
     Triangles are grouped by direction first (one loop per direction, not per
     triangle), then each direction is split where the plane offsets jump.

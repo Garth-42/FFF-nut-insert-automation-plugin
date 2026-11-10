@@ -18,25 +18,25 @@ uv build
 
 ## Checks
 
-- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.6.0 or later). It opens no
-  files and prints nothing; its output is shown in the "Nut probe" tab. Its script
-  actions are numbered from harmless to "may raise permission prompts". In OrcaSlicer
-  2.5.0 some model calls raise about a hundred prompts in a row; hold Return or Esc to
-  clear them.
+- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.7.0 or later). Its output is
+  shown in the "Nut probe" tab; it prints nothing unless you run step 7.
 
-  1. Open a project with a two-body STEP: a part plus `NUT_M3SQ`.
-  2. Run "Nut probe 1: signatures", then "Nut probe 2: model names and types", then
-     "Nut probe 3: mesh without arrays". Stop at the first one that floods prompts.
-  3. Open the "Nut probe" tab, press Refresh, Select all, copy, and append the text to
-     `docs/probe-log.txt`. Every call is logged before it is made, so the last `call`
-     line names the one Orca objected to.
-  4. Steps 4, 5 and 6 only when asked.
-  5. Slicing and export: slice, export G-code, Refresh the tab and copy again. Save the
-     exported file as `tests/data/sample.gcode`.
+  Runs 1 to 5 are done and recorded in `docs/probe-log.txt`. They showed that importing
+  numpy raised about 120 permission prompts. Probe 0.7.0 asks Orca once, while it loads,
+  for read access to Python's library folders. What is left:
 
-  Then fill `docs/api-facts.md` from the lines that start with `NUTPROBE`.
+  1. Install 0.7.0 and restart Orca. Expect **one** permission request listing folders
+     under the OrcaSlicer app and its data folder. Answer Yes.
+  2. Open the project with the part and `NUT_M3SQ`.
+  3. Run "Nut probe 5: import numpy (may prompt)". No prompt, or a flood? If it floods,
+     stop here and report.
+  4. Run "Nut probe 6: mesh arrays", "7: print test" and "8: notification test". Note
+     any prompt, and whether a notification appeared in the 3D view.
+  5. Slice and export G-code. Note any prompt.
+  6. Open the "Nut probe" tab, press Refresh, Select all, copy, and append the text to
+     `docs/probe-log.txt`. Save the exported file as `tests/data/sample.gcode`.
 
-  Result so far (10 Nov 2026): runs 1 and 2 recorded in `docs/probe-log.txt`.
+  Result:
 
 - [ ] **A, Check nuts.** Install the wheel and run Check nuts from the Plugins window.
   Expect a result line with the nut count. Rotate the part 20° about X and expect a

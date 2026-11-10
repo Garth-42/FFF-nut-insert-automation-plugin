@@ -128,3 +128,95 @@ NUTPROBE   ctx.index = -1
 NUTPROBE   ctx.name = 'Configuration 1.step'
 NUTPROBE   ctx.source = ''                                           [other fields empty]
 NUTPROBE event LifecycleEvent.ProjectOpened thread MainThread        [all fields empty, index -1]
+
+## Run 5, 10 Nov 2026: probe 0.6.0, steps 1, 2 and 4 in one session
+
+Kept: every line that states a fact the plugin relies on. Left out: doc lines that only
+repeat a signature of the form `name(self) -> bool/int`, and the lifecycle lines already
+in run 4.
+
+NUTPROBE script 1 signatures thread Dummy-2
+NUTPROBE doc orca.request_permissions = request_permissions(fs_read: collections.abc.Sequence[str] = [], fs_readwrite: collections.abc.Sequence[str] = [], network_http: collections.abc.Sequence[str] = [], network_socket: collections.abc.Sequence[str] = [], process: collections.abc.Sequence[str] = [], threading: bool = False, network: collections.abc.Sequence[str] = []) -> None |  | Request permissions while OrcaSlicer loads your module. |  | Each bucket takes the target strings the plugin expects the corresponding audit event to | report: filesystem paths for fs_read and fs_readwrite, URLs for network_http, socket addresses | for network_socket, and commands for process. threading=True requests permission to start | threads. Targets already granted to the plugin are not asked for again. |  | A filesystem target may end in "/*" to grant a whole directory tree, for example | "/path/to/folder/*". That covers the folder itself and every path beneath it, at any depth. | "*" is the only wildcard and is recognized only as the final path component; a "*" anywhere | else in a target is an ordinary character. Wildcards apply to fs_read and fs_readwrite only, | and a grant in one of those buckets never authorizes the other direction. Tree grants are | matched on canonical paths, so a symlink below the granted folder does not extend the grant | outside it. Paths the host denies by name or keyword stay denied even when a wildcard covers | them. |  | `network` also lists http(s) URLs, but each is reduced to its scheme and host, so one grant covers | every path, query and port on that host and also authorizes raw socket events for it. The host | presents one request to the user after register_capabilities() returns and before any capability | instance is created. Denying the request aborts the plugin load. |
+NUTPROBE doc orca.host.ui.create_dock_panel = [...] on_message(data) is called on the UI thread when the page posts; window.orca.close() or the panel's close button closes it and calls on_close(). A post() made before the page has loaded can be dropped, so have the page request its first data. |
+NUTPROBE dir orca.host.ui.UiDockPanel = ['_pybind11_conduit_v1_', 'close', 'hide', 'id', 'is_open', 'post', 'show']
+NUTPROBE doc orca.host.ui.UiDockPanel.post = post(self: orca.host.ui.UiDockPanel, data: object) -> None |  | Send a payload to the page (delivered to window.orca.onMessage handlers). |
+NUTPROBE dir orca.host.BoundingBox = ['_pybind11_conduit_v1_', 'center', 'defined', 'max', 'min', 'radius', 'size']
+NUTPROBE doc orca.host.TriangleMesh.face_normals = face_normals(self: orca.host.TriangleMesh) -> object |  | Per-triangle normalized normals as an (M, 3) float32 ndarray (copy). Requires numpy. |
+NUTPROBE doc orca.host.TriangleMesh.triangle = triangle(self: orca.host.TriangleMesh, arg0: typing.SupportsInt) -> tuple |
+NUTPROBE doc orca.host.TriangleMesh.triangles = triangles(self: object) -> object |  | Read-only zero-copy (M, 3) int32 ndarray of triangle vertex indices. Requires numpy. |
+NUTPROBE doc orca.host.TriangleMesh.vertex = vertex(self: orca.host.TriangleMesh, arg0: typing.SupportsInt) -> tuple |
+NUTPROBE doc orca.host.TriangleMesh.vertices = vertices(self: object) -> object |  | Read-only zero-copy (N, 3) float32 ndarray of vertex positions (local mm). Requires numpy. |
+NUTPROBE doc orca.host.ModelVolume.matrix = matrix(self: orca.host.ModelVolume) -> object |  | Volume-to-object 4x4 float64 affine matrix (copy). Requires numpy. |
+NUTPROBE doc orca.host.ModelVolume.mesh = mesh(self: orca.host.ModelVolume) -> orca.host.TriangleMesh |  | Return the volume's TriangleMesh (local coordinates) for vertex/triangle access. |
+NUTPROBE doc orca.host.ModelVolume.mirror / offset / rotation / scaling_factor = (self) -> tuple
+NUTPROBE doc orca.host.ModelInstance.matrix = matrix(self: orca.host.ModelInstance) -> object |  | Object-to-world 4x4 float64 affine matrix (copy). Requires numpy. |
+NUTPROBE doc orca.host.ModelInstance.mirror / offset / rotation / scaling_factor = (self) -> tuple
+NUTPROBE doc orca.host.Layer.lower_layer = The layer below, or None.
+NUTPROBE doc orca.host.Layer.lslices = lslices(self: object) -> list |  | Merged per-layer islands as [ExPolygon] refs (in-place editable). Derived from the region slices; call make_slices() to re-derive after edits. Invalidated by make_slices(). |
+NUTPROBE doc orca.host.Layer.make_slices = make_slices(self: orca.host.Layer) -> None |  | Re-derive lslices (merged islands) from the region slices and refresh the bbox cache [...] |
+NUTPROBE doc orca.host.Layer.regions = regions(self: object) -> list |  | Per-region data as [LayerRegion]. |
+NUTPROBE doc orca.host.Print.config_value = config_value(self: orca.host.Print, key: str) -> object |  | Serialized value of the resolved (full) print config for this slice, or None. |
+NUTPROBE doc orca.host.Print.model = model(self: orca.host.Print) -> orca.host.Model |  | The Print's own Model snapshot (worker-thread stable). Inside slicing hooks use THIS — never orca.host.model(), which is the live GUI model owned by another thread. |
+NUTPROBE doc orca.host.Print.objects = objects(self: object) -> list |  | The print's objects as [PrintObject]. |
+NUTPROBE doc orca.host.PrintObject.bounding_box = bounding_box(self: orca.host.PrintObject) -> tuple |  | Object XY bounding box in scaled coords as (min_x, min_y, max_x, max_y). The sliced polygons live in this same frame, so its midpoint is the footprint center. |
+NUTPROBE doc orca.host.PrintObject.layers = layers(self: object) -> list |  | Object layers, bottom-up, as [Layer]. |
+NUTPROBE doc orca.host.PrintObject.model_object = model_object(self: orca.host.PrintObject) -> object |  | The source orca.host.ModelObject from the Print's own model snapshot. |
+NUTPROBE doc orca.host.PrintObject.trafo = trafo(self: orca.host.PrintObject) -> object |  | Object-to-print 4x4 float64 affine matrix (copy). Requires numpy. |
+NUTPROBE dir SlicingPipelineContext = ['_pybind11_conduit_v1_', 'cancelled', 'config_value', 'gcode_path', 'host', 'object', 'orca_version', 'output_name', 'print', 'step']
+NUTPROBE doc SlicingPipelineContext.config_value = config_value(self: orca.slicing.SlicingPipelineContext, key: str) -> object |  | serialized value of a resolved (full) print config option for this slice, or None if absent. Shorthand for ctx.print.config_value(key). |
+NUTPROBE doc SlicingPipelineContext.gcode_path = Path to the working G-code file, set ONLY at Step.psGCodePostProcess. Edit it in place; empty at every other step.
+NUTPROBE doc SlicingPipelineContext.host = Target host at Step.psGCodePostProcess ("File", "OctoPrint", ...); empty otherwise.
+NUTPROBE doc SlicingPipelineContext.object = orca.host.PrintObject for object-scoped steps, or None for print-wide steps. Valid only during the execute(ctx) call.
+NUTPROBE doc SlicingPipelineContext.output_name = Final output G-code name at Step.psGCodePostProcess (mirrors SLIC3R_PP_OUTPUT_NAME); empty otherwise.
+NUTPROBE doc SlicingPipelineContext.print = The orca.host.Print being sliced — the raw slicing graph, exactly what the C++ pipeline walks. Valid only during the execute(ctx) call. For mesh access use ctx.print.model() (the Print's snapshot), never orca.host.model().
+NUTPROBE doc PythonPluginBase.get_config = get_config(self: orca.PythonPluginBase) -> str |  | Return this capability's stored config as a JSON string — json.loads() it to use. | "{}" if it has never been saved, so the parsed result is always indexable. |
+NUTPROBE doc PythonPluginBase.get_config_ui = get_config_ui(self: orca.PythonPluginBase) -> str |  | Override to return the custom configuration UI as an HTML string. Only called when | has_config_ui() is True; an empty result falls back to the default JSON editor. | Inside the page, use window.orca.getConfig()/saveConfig() to reach this same config. |
+NUTPROBE doc PythonPluginBase.get_default_config = get_default_config(self: orca.PythonPluginBase) -> str |  | Override to return the config that the Config tab's "Restore defaults" action writes | back, as a dict. Optional: without it the action stores an empty config, [...] Calling it returns that config as a JSON string. |
+NUTPROBE doc PythonPluginBase.save_config = save_config(self: orca.PythonPluginBase, config: str) -> bool |  | Persist this capability's config, given as a JSON string (e.g. json.dumps(cfg)). [...] Returns False if | the string is not valid JSON, or if the config file could not be written. |
+NUTPROBE doc orca.slicing.unscale = unscale(coord: typing.SupportsInt) -> float |  | Convert a scaled integer coordinate to millimeters (reads the live SCALING_FACTOR). |
+NUTPROBE dir orca.host.plugin = ['storage']
+NUTPROBE app_info FAILED RuntimeError('app_info() must be called from the UI thread')
+NUTPROBE sys.version = 3.12.13 (main, Oct 31 2026, 16:44:48) [Clang 17.0.0 (clang-1700.0.13.5)]
+NUTPROBE numpy already loaded = False
+NUTPROBE sys.path = ['<data>/orca_plugins/nut_api_probe.py', '<data>/python/packages/cp312', '', '<app>/Contents/MacOS/python/lib/python312.zip', '<app>/Contents/MacOS/python/lib/python3.12', '<app>/Contents/MacOS/python/lib/python3.12/lib-dynload', '<app>/Contents/MacOS/python/lib/python3.12/site-packages']
+        [<data> = ~/Library/Application Support/OrcaSlicer, <app> = /Applications/OrcaSlicer.app]
+NUTPROBE script 2 model thread Dummy-2
+NUTPROBE call host.model()                    -> <orca.host.Model object>
+NUTPROBE call model.object_count()            -> 1
+NUTPROBE call model.current_plate_index()     -> 0
+NUTPROBE call object 0 name                   -> 'Configuration 1.step'
+NUTPROBE call object 0 printable              -> True
+NUTPROBE call object 0 instance_count()       -> 1
+NUTPROBE call object 0 volume 0 name          -> 'NUT_M3SQ'
+NUTPROBE call object 0 volume 0 type()        -> <ModelVolumeType.ModelPart: 0>
+NUTPROBE call object 0 volume 0 is_modifier() -> False
+NUTPROBE call object 0 volume 0 is_model_part() -> True
+NUTPROBE call object 0 volume 0 facets_count() -> 5818
+NUTPROBE call object 0 volume 1 name          -> 'SOLID'
+NUTPROBE call object 0 volume 1 type()        -> <ModelVolumeType.ModelPart: 0>
+NUTPROBE call object 0 volume 1 is_modifier() -> False
+NUTPROBE call object 0 volume 1 is_model_part() -> True
+NUTPROBE call object 0 volume 1 facets_count() -> 24
+NUTPROBE script 4 transforms thread Dummy-2
+NUTPROBE call instance.is_left_handed()  -> False
+NUTPROBE call volume.bounding_box        -> <orca.host.BoundingBox object>
+NUTPROBE call volume.scaling_factor      -> (1.0, 1.0, 1.0)
+NUTPROBE call volume.mirror              -> (1.0, 1.0, 1.0)
+NUTPROBE call volume.offset              -> (14.7060585, 8.319543846325683, -4.01100004)
+NUTPROBE call volume.rotation            -> (0.0, -0.0, 0.0)
+NUTPROBE call instance.scaling_factor    -> (1.0, 1.0, 1.0)
+NUTPROBE call instance.mirror            -> (1.0, 1.0, 1.0)
+NUTPROBE call instance.offset            -> (150.0, 150.0, 6.11100006)
+NUTPROBE call instance.rotation          -> (0.0, -0.0, 0.0)
+NUTPROBE call volume.matrix()
+NUTPROBE   -> array([[ 1.        ,  0.        ,  0.        , 14.7060585 ],
+       [ 0.        ,  1.        ,  0.        ,  8.31954385],
+       [ 0.        ,  0.        ,  1.        , -4.01100004],
+       [ 0.        ,  0.        ,  0.        ,  1.        ]])
+NUTPROBE   -> imported 122 modules: ['_ast', '_compat_pickle', '_contextvars', '_ctypes', '_datetime', '_opcode', '_pickle', '_struct', '_tokenize', '_typing', 'ast', 'collections.abc', 'contextlib', 'contextvars', 'ctypes', 'ctypes._endian', 'datetime', 'dis', 'importlib', 'importlib._bootstrap', 'importlib._bootstrap_external', 'importlib.machinery', 'inspect', 'linecache', 'math', 'numbers', 'numpy', 'numpy.__config__', 'numpy._array_api_info', 'numpy._core']
+NUTPROBE call type(volume.matrix())      -> 'ndarray'
+NUTPROBE call instance.matrix()
+NUTPROBE   -> array([[  1.        ,   0.        ,   0.        , 150.        ],
+       [  0.        ,   1.        ,   0.        , 150.        ],
+       [  0.        ,   0.        ,   1.        ,   6.11100006],
+       [  0.        ,   0.        ,   0.        ,   1.        ]])

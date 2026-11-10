@@ -6,7 +6,7 @@
 # name = "Nut API probe"
 # description = "Shows what the plugin API exposes. Changes nothing, opens no files."
 # author = "nut-inserter"
-# version = "0.6.1"
+# version = "0.7.0"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
@@ -28,6 +28,23 @@ MAX_PER_EVENT = 2      # keep each kind of lifecycle event this many times
 MAX_LINES = 4000
 
 LINES = []             # the probe's whole output, in memory
+
+
+def permission_targets():
+    """Read access to Python's own library folders, so importing numpy raises no prompts.
+
+    Run 5 of this probe showed the flood: the first numpy use imports about 120
+    modules, and Orca asks once per file. The folders are the ones on sys.path:
+    Orca's bundled Python library and its plugin package folder.
+    """
+    targets = []
+    for entry in sys.path:
+        entry = entry.rstrip("/\\")
+        if not entry:
+            continue
+        is_file = entry.lower().endswith((".zip", ".py", ".whl", ".egg"))
+        targets.append(entry if is_file else entry + "/*")
+    return targets
 
 
 def log(*parts):
@@ -74,6 +91,15 @@ def step(label, fn):
     if new:
         log("  -> imported", len(new), "modules:", new[:30])
     return value
+
+
+# Must run while Orca loads this module. Orca then shows one request for all of it.
+try:
+    TARGETS = permission_targets()
+    orca.request_permissions(fs_read=TARGETS)
+    log("request_permissions fs_read =", TARGETS)
+except Exception as exc:  # noqa: BLE001
+    log("request_permissions FAILED", repr(exc))
 
 
 def names(obj):
@@ -213,6 +239,20 @@ def dump_mesh_arrays():
         step("triangles shape, dtype", lambda: (tris.shape, str(tris.dtype)))
 
 
+def dump_print_test():
+    log("== print, thread", thread_name(), "==")
+    step("print()", lambda: print(PREFIX, "print test line", flush=True))
+
+
+def dump_ui_test():
+    """orca.host.ui from a script's background thread: does it work or raise?"""
+    log("== ui from thread", thread_name(), "==")
+    level = orca.host.ui.NotificationLevel.RegularNotificationLevel
+    step("push_notification", lambda: orca.host.ui.push_notification(
+        level, "Nut probe: notification test"))
+    step("app_info", lambda: orca.host.app_info())
+
+
 def _value(attr):
     return attr() if callable(attr) else attr
 
@@ -306,6 +346,22 @@ class Probe6(orca.script.ScriptPluginCapabilityBase):
         return run_script("6 mesh arrays", dump_mesh_arrays)
 
 
+class Probe7(orca.script.ScriptPluginCapabilityBase):
+    def get_name(self):
+        return "Nut probe 7: print test"
+
+    def execute(self):
+        return run_script("7 print", dump_print_test)
+
+
+class Probe8(orca.script.ScriptPluginCapabilityBase):
+    def get_name(self):
+        return "Nut probe 8: notification test"
+
+    def execute(self):
+        return run_script("8 ui", dump_ui_test)
+
+
 PAGE = """<!doctype html><html><body style="font-family:sans-serif;padding:12px;margin:0">
 <h3 style="margin:0 0 8px">Nut API probe</h3>
 <p style="margin:0 0 8px">Press Refresh after each step, then Select all and copy the text.</p>
@@ -361,19 +417,42 @@ class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
                 dump_ctx(ctx)
                 for key in ("gcode_flavor", "print_sequence", "layer_height", "curr_bed_type"):
                     step(f"config_value {key}", lambda k=key: ctx.config_value(k))
-                step("model names from slicing thread", lambda: [
-                    (obj.name, [v.name for v in obj.volumes()])
-                    for obj in orca.host.model().objects()])
+                self._dump_print(ctx)
                 if current == orca.slicing.Step.psGCodePostProcess:
                     log("gcode_path =", repr(ctx.gcode_path))
+                    step("read the G-code file", lambda: self._read_gcode(ctx.gcode_path))
         except Exception as exc:  # noqa: BLE001
             log_error("slicing", exc)
         return orca.ExecutionResult.success()
 
 
+    def _dump_print(self, ctx):
+        """The Print's own model snapshot and its layers, from the slicing thread."""
+        if ctx.print is None:
+            log("ctx.print is None")
+            return
+        step("print.model() names", lambda: [
+            (obj.name, [(v.name, v.is_modifier()) for v in obj.volumes()])
+            for obj in ctx.print.model().objects()])
+        objects = step("print.objects()", lambda: ctx.print.objects()) or []
+        for po in objects[:2]:
+            step("print object bounding_box", lambda o=po: o.bounding_box())
+            layers = step("layer count", lambda o=po: len(o.layers()))
+            if layers:
+                step("first layers (print_z, height, slice_z)", lambda o=po: [
+                    (lay.print_z, lay.height, lay.slice_z) for lay in o.layers()[:4]])
+
+    def _read_gcode(self, path):
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            lines = handle.read().splitlines()
+        for i, line in enumerate(lines[:40]):
+            log(f"gcode {i + 1:5d}: {line}")
+        return f"{len(lines)} lines"
+
+
 @orca.plugin
 class NutApiProbe(orca.base):
     def register_capabilities(self):
-        for capability in (Probe1, Probe2, Probe3, Probe4, Probe5, Probe6, ProbePage,
-                           ProbeSlicing):
+        for capability in (Probe1, Probe2, Probe3, Probe4, Probe5, Probe6, Probe7, Probe8,
+                           ProbePage, ProbeSlicing):
             orca.register_capability(capability)

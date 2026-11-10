@@ -10,9 +10,13 @@ import orca
 
 from nutcore import library
 
-from . import state
+from . import adapter, state
 from .ui_panel import PANEL_HTML
 from .ui_preview import PREVIEW_HTML
+
+# Must happen while Orca loads this module: one permission request instead of one
+# prompt per file that Python opens when it imports numpy.
+adapter.request_permissions()
 
 EV = orca.LifecycleEvent
 MODEL_EVENTS = (EV.ObjectAdded, EV.ObjectDeleted, EV.ObjectTransformed,

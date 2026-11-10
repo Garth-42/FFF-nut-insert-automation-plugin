@@ -1,73 +1,77 @@
 # API facts from the probe
 
-Source: `docs/probe-log.txt`, OrcaSlicer 2.5.0 build 40ecc66f on macOS. Only step 1 of the
-probe (the API surface) has run so far; the model, slicing and export steps are pending.
+Source: `docs/probe-log.txt`, runs 1 to 5, OrcaSlicer 2.5.0 build 40ecc66f on macOS,
+bundled Python 3.12.13. When the log disagrees with `docs/SPEC.md`, the log wins: record
+the difference here and change only the `nut_inserter` package.
 
-When the log disagrees with the spec, the log wins: record the difference here and
-change only the `nut_inserter` package.
+## The permission prompts
 
-## Answered by run 1
+- **Cause, confirmed in run 5.** OrcaSlicer asks for permission each time a plugin opens
+  a file, including the files Python reads to import a module. numpy is not loaded when a
+  plugin starts. The first call that returns a numpy array (`volume.matrix()` in the run)
+  imported 122 modules: one prompt each, with no "remember" option and no file name.
+- **Fix, not yet seen working.** `orca.request_permissions(fs_read=[...])`, called while
+  Orca loads the module. A target ending in `/*` grants a folder tree. Orca shows one
+  request after `register_capabilities()` returns; denying it aborts the plugin load.
+  Targets already granted are not asked for again.
+- **What the plugin asks for.** Read access to every entry of `sys.path`: Orca's bundled
+  Python library and its plugin package folder (`<data>/python/packages/cp312`, where
+  numpy is installed). See `adapter.permission_targets()`.
+- **Open risk.** The prompt said the open "does not expose a target the audit hook can
+  display". If the audit event carries no path, a path grant cannot match it and the
+  flood would stay. Probe 0.7.0 step 5 tests exactly this.
 
-| Question | Answer |
+## Confirmed in Orca
+
+| Fact | Detail |
 | --- | --- |
-| Do pages receive objects or JSON strings? | Both arrive in the page. `on_message` gets a `dict` in Python. `POST_AS_JSON_STRING = False` is right |
-| Which thread runs what? | `get_ui`, `on_message` and lifecycle events: `MainThread`. `on_load` and a script's `execute`: a background thread (`Dummy-N`, a new one per script run) |
-| What does a lifecycle event carry? | A context with `code`, `name`, `previous_name`, `index`, `id`, `dirty`, `source`, `msg`. `ObjectAdded` gave `name = 'Configuration 1.step'` (the imported file) and `index = -1` |
-| Does `get_config()` return the default config? | No. It returned the string `'{}'` although `get_default_config()` returned a nested dict. The plugin already falls back to its own defaults in that case |
-| Does WebGL work in plugin pages? | Yes (WebKit). Not needed |
-| Do the names in the spec's API table exist? | Yes: `Step.posSlice`, `Step.psGCodePostProcess`, all eight lifecycle events, both notification levels, `create_dock_panel`, `push_notification` |
+| Page messages | The page receives objects and JSON strings alike. `on_message` gets a `dict`. `adapter.POST_AS_JSON_STRING = False` is right |
+| Threads | `get_ui`, `on_message` and lifecycle events run on `MainThread`. `on_load` and a script's `execute` run on a background thread (`Dummy-N`) |
+| UI-thread calls | `orca.host.app_info()` raised "must be called from the UI thread" from a script. Whether `push_notification` and panel `post` do the same is open: probe 0.7.0 step 8 |
+| Lifecycle context | `code`, `name`, `previous_name`, `index`, `id`, `dirty`, `source`, `msg`. `ObjectAdded` carried `name = 'Configuration 1.step'`, `index = -1` |
+| Settings | `get_config()` returns a JSON string, `"{}"` if never saved. `get_default_config()` is only what "Restore defaults" writes. The plugin applies its own defaults when the stored config is empty, which is the documented pattern |
+| Body names | The STEP body name survives import: volume 0 is `'NUT_M3SQ'`, volume 1 is `'SOLID'`. The object is named after the file |
+| Part type | `volume.is_modifier()`, `is_model_part()`, `type()` work. Both volumes were `ModelPart` |
+| Names | `volume.name`, `object.name`, `object.printable` are properties |
+| Mesh without numpy | `mesh.vertex(i)` gives `(x, y, z)`, `mesh.triangle(i)` gives `(a, b, c)`, plus `vertex_count()`, `triangle_count()`, `volume()`. No prompts |
+| Mesh and matrices with numpy | `vertices()` (N, 3) float32 and `triangles()` (M, 3) int32 are zero-copy and read-only; `matrix()` is a 4 x 4 float64 copy. All "require numpy" |
+| Transforms without numpy | `offset()`, `rotation()`, `scaling_factor()`, `mirror()` on volumes and instances return tuples |
+| Plate | `model.current_plate_index()` returned 0. The single object sat at instance offset (150, 150, 6.111) |
+| A real nut body | Garth's `NUT_M3SQ` has 2,909 vertices and 5,818 triangles (threaded hole). Its host has 24 triangles |
 
-## Found but not in the spec's API table
+## Read from docstrings, not yet seen working
 
-Signatures are from the docstrings in probe run 2. "Seen working" means a probe step has
-called it in Orca; until then it is not used in the plugin (rule 2).
-
-| Call | Signature | Why it matters | Seen working |
-| --- | --- | --- | --- |
-| `orca.request_permissions` | `(fs_read=[], fs_readwrite=[], network_http=[], network_socket=[], process=[], threading=False, network=[])`, called "while OrcaSlicer loads your module" | Ask once for file access instead of one prompt per open. The docstring was cut off, so what a path may be is not known yet | no |
-| `ModelVolume.type()` | `-> ModelVolumeType` (`ModelPart`, `ParameterModifier`, `NegativeVolume`, ...) | A part's type is readable | no |
-| `ModelVolume.is_modifier()`, `is_model_part()` | `-> bool` | The Modifier step can be checked directly instead of from the G-code | no |
-| `Model.current_plate_index()` | `-> int` | The selected plate. Which plate an object is on is still not exposed | no |
-| `TriangleMesh.vertex(i)`, `triangle(i)`, `vertex_count()`, `triangle_count()`, `volume()` | `vertex(i) -> (x, y, z)` tuple of floats, `triangle(i) -> (a, b, c)` tuple of ints | Reads a mesh without numpy arrays and without prompts | **yes** (run 3) |
-| `ModelVolume` / `ModelInstance` `.offset`, `.rotation`, `.scaling_factor`, `.mirror` | unknown | Transforms that may not need numpy arrays | no |
-| `Print.objects`, `PrintObject.layers`, `Layer.print_z`, `slice_z`, `lslices` | unknown | Sliced layers may be readable in a slicing step: layer heights and pocket outlines without parsing G-code | no |
-| `orca.host.plater()` | `-> Plater` with `project_path()`, `is_project_dirty()`, `export_3mf_copy(path)` | Project path | no |
-| `push_notification` | `(notification_level, text, hyper_text='', on_click=None)` | A clickable "open the Nuts tab" link in notifications | no |
-| `orca.host.ui.message` | `(text, title, buttons, icon) -> str` | A modal message box | no |
-| Events `SliceStarted`, `GCodeExportStarted`, `PlateSelected`, `SlicingJobComplete` | on `LifecycleEvent` | Refresh the report right before slicing | no |
-| `get_config_ui`, `has_config_ui`, `get_config_version` | on every capability base | Orca may host a settings page for a capability | no |
-
-Also confirmed: `volume.name` and `object.name` are properties, not methods. Each run of
-a script action gets a new background thread (`Dummy-2`, `Dummy-3`).
-
-## Still open
-
-| Question | Answer |
-| --- | --- |
-| Which call raises the permission flood? | Something in the transform calls of probe 0.6.0 step 4 (`bounding_box`, `scaling_factor`, `mirror`, `offset`, `rotation`, `matrix`). Names, types and point-by-point mesh reads raise none. Which call exactly, and whether it is the numpy import, is pending: step 4 output |
-| Can `request_permissions` stop the flood, and with which paths? | pending: full docstring in probe 0.6.0 step 1 |
-| May a slicing step read the model from its worker thread? | pending |
-| How do bed coordinates map to G-code coordinates on plates after the first? | pending |
-| Setting keys for G-code flavor and print order, and their values | pending |
+| Call | What the docstring says | Use |
+| --- | --- | --- |
+| `ctx.print` | "The orca.host.Print being sliced". `ctx.print.model()` is "the Print's own Model snapshot (worker-thread stable). Inside slicing hooks use THIS, never orca.host.model()" | The slice gate could measure the model actually being sliced, instead of trusting a cached report |
+| `ctx.object` | A `PrintObject` for object-scoped steps, else `None` | |
+| `PrintObject.layers()`, `Layer.print_z`, `slice_z`, `height`, `lslices()` | Layers bottom-up; `lslices` are the merged islands of a layer | Layer heights and pocket outlines without parsing G-code; maybe cutting the pocket out of the layers |
+| `ctx.gcode_path`, `ctx.output_name`, `ctx.host` | Set only at `psGCodePostProcess` | |
+| `ctx.config_value(key)` | "Serialized value of a resolved print config option, or None" | Key names still unverified |
+| `push_notification(level, text, hyper_text='', on_click=None)` | A clickable label | "Open the Nuts tab" |
+| `has_config_ui()`, `get_config_ui()` | A capability's own settings page inside the Plugins dialog, with `window.orca.getConfig()/saveConfig()` | An alternative home for the library editor |
+| `orca.host.plugin.storage` | Unknown | |
 
 ## Differences from the spec
 
-From the first probe run on OrcaSlicer 2.5.0 build 40ecc66f (macOS), 10 Nov 2026. Source:
-Orca's `debug_*.log`, not a probe log.
+| Spec says | Orca does | Plugin change |
+| --- | --- | --- |
+| Part type is not readable | `is_modifier()`, `is_model_part()` work | Done: `adapter.part_type()`, finding `E_NOT_MODIFIER`, modifiers are no longer walls |
+| Threads, files and network raise prompts | So does every module import | Done: `request_permissions` at load. Unverified |
+| Script `execute` runs on the UI thread | Background thread | Open: the check posts to pages and raises notifications from there |
+| "Create the dock panel in `on_load()`" | `on_load` runs on a background thread | Open: unverified whether `create_dock_panel` works there |
+| `get_default_config()` supplies the defaults | Only for "Restore defaults" | None needed |
+| Logs: `print()` goes to `log/python_*.log` | No such file was found | Open: probe 0.7.0 step 7 |
+| At post-process `ctx.print` is `None`; the model must not be read from a slicing step | `ctx.print.model()` is meant for exactly that | Not used yet |
+| Plate information is not available | `current_plate_index()` exists; per-object plate does not | Not used yet |
 
-- **Running the probe's script action raised 99 `[AUDIT BLOCKED] plugin=nut_api_probe
-  event=open` prompts in 1.4 s.** The cause is not confirmed. The count is close to the
-  number of lines the script printed, and no `python_*.log` was created, so the leading
-  guess is that each `print()` opens the Python log file and is audited as the plugin.
-  The other candidate is the numpy import behind `mesh.vertices()`. Probe 0.3.0 separates
-  the two.
-- **No `python_*.log` exists in the data folder's `log` directory**, against the spec's
-  "Logs: `print()`" row.
-- **A script capability's `execute` and every `on_load` run on a background thread**
-  (`Dummy-1`), against the spec's "UI thread" note. Confirmed by probe run 1. The plugin
-  creates its dock panel in `on_load` and posts to pages and raises notifications from
-  `execute`; whether those `orca.host.ui` calls are safe off the main thread is not known.
+## Still open
 
-Consequences for the plugin, not yet applied: `state.guarded` prints tracebacks and the
-export step prints a status line and opens the G-code file. If `print` is the cause, both
-must stop printing.
+| Question | Probe 0.7.0 step |
+| --- | --- |
+| Does the `request_permissions` grant stop the import flood? | 5 |
+| Does `print()` raise a prompt? Where does it go? | 7 |
+| Does `orca.host.ui` work from a script's background thread? | 8 |
+| What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | slicing |
+| Does opening `ctx.gcode_path` raise a prompt? | export |
+| How do bed coordinates map to G-code coordinates on plates after the first? | not probed yet |

@@ -33,8 +33,12 @@ def detect(snapshot: ModelSnapshot, config: dict | library.Library) -> Report:
             continue
         for ii, inst in enumerate(obj.instances, start=1):
             meshes = [bed_mesh(part, inst) for part in obj.parts]
-            host_parts = [m.corners() for m, is_nut in zip(meshes, nut_parts, strict=True)
-                          if not is_nut and len(m.triangles)]
+            # Walls are the parts that print. Modifiers, support blockers and the like
+            # are not plastic, so they are not walls.
+            host_parts = [m.corners() for m, part, is_nut
+                          in zip(meshes, obj.parts, nut_parts, strict=True)
+                          if not is_nut and part.kind in ("part", "unknown")
+                          and len(m.triangles)]
             host = np.concatenate(host_parts) if host_parts else np.zeros((0, 3, 3))
             for pi, (part, mesh, is_nut) in enumerate(
                     zip(obj.parts, meshes, nut_parts, strict=True), start=1):
@@ -43,6 +47,11 @@ def detect(snapshot: ModelSnapshot, config: dict | library.Library) -> Report:
                 record = NutRecord(index=len(report.nuts) + 1, object=oi, instance=ii, part=pi,
                                    name=part.name)
                 _detect_nut(record, mesh, host, lib, keys)
+                if part.kind == "part":
+                    record.add("E_NOT_MODIFIER", f"{record.label}: this nut body is still a "
+                               "printing part, so it would print as plastic and fill its own "
+                               "pocket. Select it in the object list, right-click, Change "
+                               "type, Modifier.")
                 record.status = status_of(record.findings)
                 report.nuts.append(record)
     return report

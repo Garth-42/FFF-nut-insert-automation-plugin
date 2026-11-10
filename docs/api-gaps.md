@@ -6,9 +6,9 @@ the fallback that was built. No `orca` call outside the spec's API table is used
 | Wanted | Why | Fallback built |
 | --- | --- | --- |
 | Set a part's type to Modifier | A nut body left as a part prints as plastic | Manual step, shown in the panel after every check |
-| Read a part's type | Know whether the manual step was done | Pocket proof at export: no extrusion inside the pocket. `adapter.part_type()` is the one place to add the call later |
+| Read a part's type | Know whether the manual step was done | **Closed.** `is_modifier()` exists in 2.5.0 though the docs do not list it; `adapter.part_type()` uses it. The pocket proof at export stays as a second check |
 | Plate of an object, plate offset | Export only the nuts on the exported plate | Plate 1 only. A nut with nothing printed around it is skipped (`N_NOT_ON_PLATE`) |
-| Read the model from a slicing step | Re-measure at slice time | The report cached on the UI thread; a stale report fails the slice |
+| Read the model from a slicing step | Re-measure at slice time | The report cached on the UI thread; a stale report fails the slice. `ctx.print.model()` exists for this and is not used yet |
 | Stop a slice from an event handler | Block on errors early | The slicing step returns a failure at `posSlice` |
 | Draw in Orca's 3D view, read the selection | Highlight pockets in place | The plugin's own Nuts tab with a canvas wireframe |
 | Read a plugin's own data files | Ship the HTML pages as files | The pages are Python string constants |

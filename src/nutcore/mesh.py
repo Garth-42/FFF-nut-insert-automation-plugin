@@ -28,6 +28,7 @@ class PartSnapshot:
     vertices: np.ndarray    # (N, 3) float64 copy, part-local, mm
     triangles: np.ndarray   # (M, 3) int32
     matrix: np.ndarray      # (4, 4) float64, part -> object
+    kind: str = "unknown"   # "part" (prints), "modifier", "other", or "unknown"
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ def fingerprint(objects) -> str:
         h.update(b"O")
         for part in obj.parts:
             h.update(part.name.encode("utf-8", "replace"))
+            h.update(part.kind.encode())
             h.update(np.asarray(part.matrix, dtype=np.float64).tobytes())
             h.update(struct.pack("<ii", len(part.vertices), len(part.triangles)))
             if len(part.vertices):

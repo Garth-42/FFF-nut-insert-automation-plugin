@@ -235,3 +235,48 @@ def test_report_round_trips_through_json_and_csv():
 def test_parts_without_nuts_give_an_empty_report():
     report = run([pocket_block()])
     assert report.nuts == [] and report.summary == {"ok": 0, "warning": 0, "error": 0}
+
+
+def test_nut_body_that_still_prints_is_an_error():
+    from dataclasses import replace
+
+    printing = replace(nut(centre=(0, 0, NUT_Z)), kind="part")
+    (n,) = run([pocket_block(), printing]).nuts
+    assert codes(n) == ["E_NOT_MODIFIER"] and n.status == "error"
+    assert "Modifier" in n.findings[0].message
+    assert n.placement == pytest.approx([112.4, 87.25, 5.3], abs=TOL)   # still measured
+    as_modifier = replace(printing, kind="modifier")
+    assert run([pocket_block(), as_modifier]).nuts[0].status == "ok"
+
+
+def test_modifiers_that_are_not_nuts_are_not_walls():
+    from dataclasses import replace
+
+    blocker = replace(pocket_block(name="Support blocker"), kind="modifier")
+    (n,) = run([blocker, nut(centre=(0, 0, NUT_Z))]).nuts
+    assert codes(n) == ["E_NO_POCKET"]
+
+
+def test_nut_body_with_a_round_hole_and_many_facets():
+    """A real nut model: the probe found 5,818 triangles in Garth's NUT_M3SQ body."""
+    import time
+
+    from builders import merge, part
+    from nutcore.mesh import Mesh
+
+    sides = 720
+    angle = np.linspace(0, 2 * np.pi, sides, endpoint=False)
+    ring = np.column_stack([1.25 * np.cos(angle), 1.25 * np.sin(angle)])
+    vertices = np.vstack([np.column_stack([ring, np.full(sides, -0.9)]),
+                          np.column_stack([ring, np.full(sides, 0.9)])])
+    i = np.arange(sides)
+    j = (i + 1) % sides
+    hole = Mesh(vertices, np.vstack([np.column_stack([i, j, i + sides]),
+                                     np.column_stack([j, j + sides, i + sides])]))
+    body = merge([box((5.5, 5.5, 1.8)), hole])
+    body = Mesh(body.vertices + np.array([0, 0, NUT_Z]), body.triangles)
+    start = time.perf_counter()
+    (n,) = run([pocket_block(bolt_hole=3.4), part("NUT_M3SQ", body)]).nuts
+    assert (n.cls, n.status, n.findings) == ("FLAT", "ok", [])
+    assert n.placement == pytest.approx([112.4, 87.25, 5.3], abs=TOL)
+    assert time.perf_counter() - start < 0.1

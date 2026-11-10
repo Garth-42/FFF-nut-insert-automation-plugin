@@ -48,26 +48,16 @@ class Orientation:
 def nut_frame(vertices: np.ndarray, faces: list[FlatFace], across_flats: float,
               thickness: float, axis_tol_deg: float, body_tol: float) -> NutFrame:
     """Find the nut's axes from its flat faces and check its size against the library."""
-    # Merge faces that point the same or the opposite way into directions.
-    cos_same = np.cos(np.radians(axis_tol_deg))
-    directions: list[list] = []  # [unit vector, total area]
-    for face in faces:
-        for entry in directions:
-            if abs(entry[0] @ face.normal) >= cos_same:
-                entry[1] += face.area
-                break
-        else:
-            directions.append([face.normal, face.area])
-    directions.sort(key=lambda entry: -entry[1])
-
-    # The three largest directions that are perpendicular to each other.
+    # The three largest faces that are perpendicular to each other. Faces come largest
+    # first. A face parallel to a chosen axis is its opposite side; anything oblique
+    # (a chamfer, a facet of the threaded hole) is passed over.
     sin_tol = np.sin(np.radians(axis_tol_deg))
     axes: list[np.ndarray] = []
-    for normal, _ in directions:
-        if all(abs(normal @ chosen) <= sin_tol for chosen in axes):
-            axes.append(normal)
-        if len(axes) == 3:
-            break
+    for face in faces:
+        if all(abs(face.normal @ chosen) <= sin_tol for chosen in axes):
+            axes.append(face.normal)
+            if len(axes) == 3:
+                break
     if len(axes) < 3:
         raise BodySizeError("the body is not a box with three perpendicular pairs of faces")
 

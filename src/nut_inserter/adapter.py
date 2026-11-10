@@ -5,6 +5,7 @@ module means a change in Orca is a change in this file only.
 """
 
 import json
+import sys
 
 import numpy as np
 import orca
@@ -22,6 +23,34 @@ from nutcore.mesh import (
 POST_AS_JSON_STRING = False
 
 
+# --- Permissions ----------------------------------------------------------------------------
+
+def permission_targets() -> list[str]:
+    """Read access to Python's own library folders: everything on sys.path.
+
+    OrcaSlicer asks for permission each time a plugin opens a file, and that
+    includes the files Python reads to import a module. The first numpy use
+    imports about 120 modules, which was 120 prompts in a row (docs/api-facts.md).
+    A target ending in "/*" grants a whole folder tree.
+    """
+    targets = []
+    for entry in sys.path:
+        entry = entry.rstrip("/\\")
+        if not entry:
+            continue
+        is_file = entry.lower().endswith((".zip", ".py", ".whl", ".egg"))
+        targets.append(entry if is_file else entry + "/*")
+    return targets
+
+
+def request_permissions() -> None:
+    """Ask once, while Orca loads the plugin. Orca shows one request for all targets."""
+    try:
+        orca.request_permissions(fs_read=permission_targets())
+    except Exception as exc:  # noqa: BLE001  an older Orca without the call still loads
+        print(f"Nut inserter: request_permissions failed: {exc!r}")
+
+
 # --- Model ----------------------------------------------------------------------------------
 
 def snapshot() -> ModelSnapshot:
@@ -36,7 +65,8 @@ def snapshot() -> ModelSnapshot:
                 name=str(name),
                 vertices=np.array(mesh.vertices(), dtype=np.float64).reshape(-1, 3),
                 triangles=np.array(mesh.triangles(), dtype=np.int32).reshape(-1, 3),
-                matrix=np.array(vol.matrix(), dtype=np.float64).reshape(4, 4)))
+                matrix=np.array(vol.matrix(), dtype=np.float64).reshape(4, 4),
+                kind=part_type(vol)))
         instances = [InstanceSnapshot(
             matrix=np.array(inst.matrix(), dtype=np.float64).reshape(4, 4),
             mirrored=bool(inst.is_left_handed())) for inst in obj.instances()]
@@ -44,14 +74,19 @@ def snapshot() -> ModelSnapshot:
     return make_snapshot(objects)
 
 
-def part_type(volume):
-    """The part's type (normal part, modifier, ...), or None when Orca does not expose it.
+def part_type(volume) -> str:
+    """The part's type: "part" (it prints), "modifier", "other" or "unknown".
 
-    OrcaSlicer 2.5 does not, so the Modifier step is manual and the export step
-    proves it from the G-code. When Orca adds the call, use it here and nothing
-    else needs to change. See docs/api-gaps.md.
+    The documentation does not list these calls, but the probe found and ran
+    them in OrcaSlicer 2.5.0 (docs/api-facts.md). Setting the type is still not
+    possible, so the user changes a nut body to Modifier by hand.
     """
-    return None
+    try:
+        if volume.is_modifier():
+            return "modifier"
+        return "part" if volume.is_model_part() else "other"
+    except Exception:  # noqa: BLE001
+        return "unknown"
 
 
 # --- Results --------------------------------------------------------------------------------

@@ -228,3 +228,21 @@ def test_only_the_plugin_package_imports_orca():
     core = Path(library.__file__).parent
     for source in core.rglob("*.py"):
         assert "import orca" not in source.read_text(), source
+
+
+def test_permissions_are_requested_once_at_load():
+    (request,) = orca._fake.permission_requests
+    assert request["fs_readwrite"] == []
+    assert request["fs_read"] == adapter.permission_targets()
+    assert all(t.endswith(("/*", ".zip", ".py", ".whl", ".egg")) for t in request["fs_read"])
+
+
+def test_nut_body_left_as_a_printing_part_blocks_the_slice(plugin):
+    from dataclasses import replace
+
+    parts = [pocket_block(), replace(nut(centre=(0, 0, 0.9)), kind="part")]
+    orca._fake.set_model(snapshot(parts, [BED]))
+    plugin.check.execute()
+    assert [f.code for f in state.report.nuts[0].findings] == ["E_NOT_MODIFIER"]
+    result = plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice))
+    assert result.status == FAIL and "Change type, Modifier" in result.message

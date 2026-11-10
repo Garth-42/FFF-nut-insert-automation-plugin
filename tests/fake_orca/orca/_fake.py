@@ -6,6 +6,7 @@ plugin_classes = []
 registered = []
 panels = []
 notifications = []
+permission_requests = []   # filled once, when the plugin module is imported
 in_slicing_step = False   # set by tests; orca.host.ui then refuses calls, like a deadlock
 
 
@@ -24,13 +25,20 @@ class Mesh:
 
 
 class Volume:
-    def __init__(self, name, vertices, triangles, matrix):
+    def __init__(self, name, vertices, triangles, matrix, kind="part"):
         self.name = name
+        self.kind = kind
         self._mesh = Mesh(vertices, triangles)
         self._matrix = np.asarray(matrix, dtype=np.float64)
 
     def mesh(self):
         return self._mesh
+
+    def is_modifier(self):
+        return self.kind == "modifier"
+
+    def is_model_part(self):
+        return self.kind == "part"
 
     def matrix(self):
         return self._matrix
@@ -84,11 +92,19 @@ class Ctx:
 current_model = Model()
 
 
+def _kind(part):
+    """Parts built without a kind: nut bodies are modifiers, the rest print."""
+    if part.kind != "unknown":
+        return part.kind
+    return "modifier" if "NUT_" in part.name.upper() else "part"
+
+
 def set_model(snapshot):
     """Load a nutcore ModelSnapshot as the fake model."""
     global current_model
     current_model = Model(
-        Object([Volume(p.name, p.vertices, p.triangles, p.matrix) for p in obj.parts],
+        Object([Volume(p.name, p.vertices, p.triangles, p.matrix, _kind(p))
+                for p in obj.parts],
                [Instance(i.matrix, i.mirrored) for i in obj.instances])
         for obj in snapshot.objects)
 

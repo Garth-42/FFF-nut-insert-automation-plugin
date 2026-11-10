@@ -10,9 +10,13 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 ## Status
 
 All seven milestones of the build brief are implemented and tested **at a desk**:
-79 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
-**Nothing has run inside OrcaSlicer yet.** The steps that need Orca are in
-[`docs/manual-test.md`](docs/manual-test.md); start with the probe.
+84 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
+**The plugin itself has not run inside OrcaSlicer yet.** The probe has, and what it
+found is in [`docs/api-facts.md`](docs/api-facts.md). The main finding: OrcaSlicer 2.5.0
+asks for permission on every file a plugin opens, including the roughly 120 files Python
+reads to load numpy. The plugin now asks once, at load, for read access to Python's
+library folders; whether that stops the prompts is the next thing to test. The steps
+are in [`docs/manual-test.md`](docs/manual-test.md).
 
 First-build limits: square nuts only, plate 1 only, print order by layer, no support
 material in pockets, and you set each nut body to Modifier by hand.
@@ -69,7 +73,8 @@ folder). It settles what Orca's documentation leaves open. See `docs/manual-test
 2. Import the STEP file into OrcaSlicer. The plugin checks the nuts whenever the model
    changes, or when you press **Check nuts**.
 3. Set every nut body to Modifier: select it in the object list, right-click,
-   Change type, Modifier. A plugin cannot do this in 2.5.
+   Change type, Modifier. A plugin cannot do this in 2.5, but it can see it: a nut body
+   that still prints is reported as an error.
 4. Fix anything the panel or the **Nuts** tab reports. Messages give the measurement,
    the allowed range and the change to make in CAD.
 5. Slice and export. An error blocks the slice (or skips the nut, your choice). At
