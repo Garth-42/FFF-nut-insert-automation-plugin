@@ -21,3 +21,53 @@ NUTPROBE dir orca.ExecutionResult = ['_pybind11_conduit_v1_', 'data', 'failure',
 NUTPROBE dir orca.PluginResult = ['FatalError', 'RecoverableError', 'Skipped', 'Success', '_pybind11_conduit_v1_', 'name', 'value']
 NUTPROBE page get_ui, thread MainThread
 NUTPROBE page on_message type dict value {'type': 'ready'} thread MainThread
+
+## Run 2, 10 Nov 2026: probe 0.5.0, "1 API" with signatures
+
+Lines that repeat run 1 are left out, and so are the per-method doc lines of Model and
+ModelObject: each read `name(self) -> type` with the return types summarised in
+docs/api-facts.md. Script 1 ran on threads Dummy-2 and Dummy-3 on its two runs.
+
+NUTPROBE doc orca.request_permissions = request_permissions(fs_read: collections.abc.Sequence[str] = [], fs_readwrite: collections.abc.Sequence[str] = [], network_http: collections.abc.Sequence[str] = [], network_socket: collections.abc.Sequence[str] = [], process: collections.abc.Sequence[str] = [], threading: bool = False, network: collections.abc.Sequence[str] = []) -> None |  | Request permissions while OrcaSlicer loads your module. |  | Each bucket takes the target strings the plugin expects the corresponding audit event to | report: filesystem paths for fs_read and fs_readwrite, URLs for network_http, socket addresses | for ne   [cut at 600 characters by the probe]
+NUTPROBE doc orca.register_capability = register_capability(arg0: object) -> None |  | Register a PluginCapability subclass while OrcaSlicer loads your module. |
+NUTPROBE doc orca.host.model = model() -> orca.host.Model |
+NUTPROBE doc orca.host.plater = plater() -> orca.host.Plater |
+NUTPROBE doc orca.host.preset_bundle = preset_bundle() -> orca.host.PresetBundle |
+NUTPROBE doc orca.host.ui.create_dock_panel = create_dock_panel(html: str, title: str = 'OrcaSlicer', width: typing.SupportsInt = 320, height: typing.SupportsInt = 480, on_message: object = None, on_close: object = None, dock: str = 'right') -> object |  | Open an HTML panel docked beside the 3D view and return a UiDockPanel. dock is "left", "right", "bottom" or "float", and width/height are in DIPs; the user can move and resize the panel, and a panel opened again comes back where the window layout was last saved. The panel belongs to the Prepare and Preview tabs. on_message(data) is called on the UI thread when the page posts; window.orc   [cut]
+NUTPROBE doc orca.host.ui.create_window = create_window(html: str, title: str = 'OrcaSlicer', width: typing.SupportsInt = 820, height: typing.SupportsInt = 600, on_message: object = None, on_close: object = None, style: typing.SupportsInt = 0, on_submit: object = None) -> object |  | Open a persistent HTML window or modal dialog and return a UiWindow. style is WINDOW_MODELESS or WINDOW_MODAL. on_message(data) is called on the UI thread when the page posts; on_submit(data) is called when the page submits; offload heavy work to a thread and push results back with window.post(). |
+NUTPROBE doc orca.host.ui.push_notification = push_notification(notification_level: orca.host.ui.NotificationLevel, text: str, hyper_text: str = '', on_click: object = None) -> None |  | Push a plater notification. hyper_text is an underlined label; on_click() is called when it is clicked and may return True to close the notification. |
+NUTPROBE doc orca.host.ui.message = message(text: str, title: str = 'OrcaSlicer', buttons: str = 'ok', icon: str = 'info') -> str |  | Show a native modal message box; returns the clicked button id ("ok"/"cancel"/"yes"/"no"). buttons: "ok"|"ok_cancel"|"yes_no"|"yes_no_cancel"; icon: "info"|"warning"|"error"|"question". |
+NUTPROBE dir orca.host.Model = ['_pybind11_conduit_v1_', 'bounding_box', 'bounding_box_approx', 'current_plate_index', 'design_id', 'designer', 'id', 'is_fdm_support_painted', 'is_fuzzy_skin_painted', 'is_mm_painted', 'is_seam_painted', 'material_count', 'max_z', 'object', 'object_count', 'objects']
+NUTPROBE dir orca.host.ModelObject = ['_pybind11_conduit_v1_', 'bounding_box', 'config_keys', 'config_value', 'facets_count', 'has_custom_layering', 'id', 'input_file', 'instance', 'instance_count', 'instances', 'is_cut', 'is_fdm_support_painted', 'is_fuzzy_skin_painted', 'is_mm_painted', 'is_multiparts', 'is_seam_painted', 'materials_count', 'max_z', 'mesh_errors_count', 'min_z', 'module_name', 'name', 'parts_count', 'printable', 'raw_mesh_bounding_box', 'volume', 'volume_count', 'volumes']
+NUTPROBE dir orca.host.ModelVolume = ['_pybind11_conduit_v1_', 'bounding_box', 'config_keys', 'config_value', 'extruder_id', 'facets_count', 'id', 'is_fdm_support_painted', 'is_fuzzy_skin_painted', 'is_manifold', 'is_mm_painted', 'is_model_part', 'is_modifier', 'is_negative_volume', 'is_precise_seam', 'is_precise_seam_strong', 'is_precise_seam_weak', 'is_seam_painted', 'is_support_blocker', 'is_support_enforcer', 'is_support_modifier', 'matrix', 'mesh', 'mesh_errors_count', 'mirror', 'name', 'offset', 'rotation', 'scaling_factor', 'type', 'volume']
+NUTPROBE dir orca.host.ModelVolumeType = ['Invalid', 'ModelPart', 'NegativeVolume', 'ParameterModifier', 'PreciseSeamBlocked', 'PreciseSeamCenter', 'PreciseSeamEnforced', 'PreciseSeamLeft', 'PreciseSeamNeutral', 'PreciseSeamRight', 'SupportBlocker', 'SupportEnforcer', '_pybind11_conduit_v1_', 'name', 'value']
+NUTPROBE dir orca.host.ModelInstance = ['_pybind11_conduit_v1_', 'assemble_matrix', 'assemble_offset', 'assemble_rotation', 'bounding_box', 'id', 'is_assemble_initialized', 'is_left_handed', 'is_printable', 'matrix', 'mirror', 'offset', 'offset_to_assembly', 'printable', 'rotation', 'scaling_factor']
+NUTPROBE dir orca.host.TriangleMesh = ['_pybind11_conduit_v1_', 'bounding_box', 'face_normals', 'facets_count', 'is_empty', 'is_manifold', 'triangle', 'triangle_count', 'triangles', 'vertex', 'vertex_count', 'vertices', 'volume']
+NUTPROBE dir orca.host.Plater = ['_pybind11_conduit_v1_', 'export_3mf_copy', 'inside_snapshot_capture', 'is_presets_dirty', 'is_project_dirty', 'model', 'project_path']
+NUTPROBE dir orca.host.Print = ['_pybind11_conduit_v1_', 'canceled', 'config_keys', 'config_value', 'model', 'objects']
+NUTPROBE dir orca.host.PrintObject = ['_pybind11_conduit_v1_', 'bounding_box', 'config_keys', 'config_value', 'id', 'layers', 'model_object', 'support_layers', 'trafo']
+NUTPROBE dir orca.host.Layer = ['_pybind11_conduit_v1_', 'height', 'lower_layer', 'lslices', 'make_slices', 'print_z', 'regions', 'slice_z', 'upper_layer']
+NUTPROBE dir orca.PluginContext = ['_pybind11_conduit_v1_', 'orca_version']
+NUTPROBE dir orca.LifecycleEventContext = ['_pybind11_conduit_v1_', 'code', 'device_id', 'dirty', 'id', 'index', 'job_id', 'msg', 'name', 'previous_name', 'source']
+NUTPROBE dir orca.PythonPluginBase = ['_pybind11_conduit_v1_', 'get_config', 'get_config_ui', 'get_config_version', 'get_default_config', 'get_name', 'get_type', 'has_config_ui', 'on_lifecycle_event', 'on_load', 'on_unload', 'save_config']
+NUTPROBE dir orca.slicing = ['SlicingPipelineCapabilityBase', 'SlicingPipelineContext', 'Step', 'posContouring', 'posDetectOverhangsForLift', 'posEstimateCurledExtrusions', 'posInfill', 'posIroning', 'posPerimeters', 'posPrepareInfill', 'posSimplifyPath', 'posSlice', 'posSupportMaterial', 'psGCodePostProcess', 'psSkirtBrim', 'psWipeTower', 'unscale']
+NUTPROBE dir orca.pages = ['PagesPluginCapabilityBase']
+NUTPROBE doc orca.host.ModelVolume.type = type(self: orca.host.ModelVolume) -> orca.host.ModelVolumeType |
+NUTPROBE doc orca.host.ModelVolume.is_modifier = is_modifier(self: orca.host.ModelVolume) -> bool |
+NUTPROBE doc orca.host.ModelVolume.is_model_part = is_model_part(self: orca.host.ModelVolume) -> bool |
+NUTPROBE doc orca.host.ModelVolume.name =            [empty: a property, not a method]
+NUTPROBE doc orca.host.Model.current_plate_index = current_plate_index(self: orca.host.Model) -> int |
+NUTPROBE doc orca.host.Model.objects = objects(self: orca.host.Model) -> list |
+NUTPROBE doc orca.host.ModelObject.name =            [empty: a property]
+NUTPROBE doc orca.host.ModelObject.printable =       [empty: a property]
+NUTPROBE doc orca.host.ModelObject.volumes = volumes(self: orca.host.ModelObject) -> list |
+NUTPROBE doc orca.host.ModelObject.instances = instances(self: orca.host.ModelObject) -> list |
+NUTPROBE doc orca.host.Plater.project_path = project_path(self: orca.host.Plater) -> str |
+
+## Reported by Garth, not from the tab
+
+- Probe 0.3.0 "2 model" (names, matrices, meshes): flood of permission prompts.
+- Probe 0.5.0 "1 API": no prompts. "2 model, no meshes" (names and matrices): flood again.
+- The prompt reads: Plugin "Nut API probe" is requesting permission for the Python audit
+  event "open". This operation does not expose a target the audit hook can display.
+  Buttons: Yes, No.

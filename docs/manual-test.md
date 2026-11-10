@@ -18,24 +18,25 @@ uv build
 
 ## Checks
 
-- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.3.0 or later). It opens no
-  files and prints nothing, because in OrcaSlicer 2.5.0 each of those raised a permission
-  prompt. Its output is shown in its own tab instead.
+- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.6.0 or later). It opens no
+  files and prints nothing; its output is shown in the "Nut probe" tab. Its script
+  actions are numbered from harmless to "may raise permission prompts". In OrcaSlicer
+  2.5.0 some model calls raise about a hundred prompts in a row; hold Return or Esc to
+  clear them.
 
   1. Open a project with a two-body STEP: a part plus `NUT_M3SQ`.
-  2. Run "Nut API probe: 1 API" from the Plugins window.
-  3. Run "Nut API probe: 2 model, no meshes".
-  4. Move the object, slice, and export G-code.
-  5. Open the "Nut probe" tab, press Refresh, Select all, copy, and save the text as
-     `docs/probe-log.txt`.
-  6. Save the exported G-code file as `tests/data/sample.gcode`.
-  7. Last, and only when asked: run "Nut API probe: 3 mesh (may prompt)". In 2.5.0
-     reading a mesh raised about a hundred permission prompts. Refresh the tab afterwards
-     and copy the text again.
+  2. Run "Nut probe 1: signatures", then "Nut probe 2: model names and types", then
+     "Nut probe 3: mesh without arrays". Stop at the first one that floods prompts.
+  3. Open the "Nut probe" tab, press Refresh, Select all, copy, and append the text to
+     `docs/probe-log.txt`. Every call is logged before it is made, so the last `call`
+     line names the one Orca objected to.
+  4. Steps 4, 5 and 6 only when asked.
+  5. Slicing and export: slice, export G-code, Refresh the tab and copy again. Save the
+     exported file as `tests/data/sample.gcode`.
 
   Then fill `docs/api-facts.md` from the lines that start with `NUTPROBE`.
 
-  Result:
+  Result so far (10 Nov 2026): runs 1 and 2 recorded in `docs/probe-log.txt`.
 
 - [ ] **A, Check nuts.** Install the wheel and run Check nuts from the Plugins window.
   Expect a result line with the nut count. Rotate the part 20° about X and expect a

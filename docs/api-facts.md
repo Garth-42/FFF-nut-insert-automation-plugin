@@ -18,27 +18,36 @@ change only the `nut_inserter` package.
 
 ## Found but not in the spec's API table
 
-Names only. Signatures are unknown until probe 0.4.0 records their docstrings, so none of
-these is used yet (rule 2).
+Signatures are from the docstrings in probe run 2. "Seen working" means a probe step has
+called it in Orca; until then it is not used in the plugin (rule 2).
 
-| Name | Why it matters |
-| --- | --- |
-| `orca.request_permissions` | May let the plugin ask once for file access instead of one prompt per open |
-| `orca.host.ModelVolumeType`, `orca.host.ModelVolume` | A part's type may be readable, which would replace the manual Modifier check |
-| `orca.host.plater`, `orca.host.Plater`, events `PlateSelected`, `PlateCreated`, `PlateDeleted` | Plate information may be available, which would lift the plate-1 limit |
-| Events `SliceStarted`, `GCodeExportStarted`, `SlicingJobComplete` | A chance to refresh the report right before slicing |
-| `orca.host.Print`, `PrintObject`, `Layer`, `LayerRegion` | Sliced layers may be readable from a slicing step |
-| `orca.host.ui.message`, `create_window` | Other ways to show a result |
+| Call | Signature | Why it matters | Seen working |
+| --- | --- | --- | --- |
+| `orca.request_permissions` | `(fs_read=[], fs_readwrite=[], network_http=[], network_socket=[], process=[], threading=False, network=[])`, called "while OrcaSlicer loads your module" | Ask once for file access instead of one prompt per open. The docstring was cut off, so what a path may be is not known yet | no |
+| `ModelVolume.type()` | `-> ModelVolumeType` (`ModelPart`, `ParameterModifier`, `NegativeVolume`, ...) | A part's type is readable | no |
+| `ModelVolume.is_modifier()`, `is_model_part()` | `-> bool` | The Modifier step can be checked directly instead of from the G-code | no |
+| `Model.current_plate_index()` | `-> int` | The selected plate. Which plate an object is on is still not exposed | no |
+| `TriangleMesh.vertex(i)`, `triangle(i)`, `vertex_count`, `triangle_count`, `bounding_box` | unknown | A way to read a mesh that may not need numpy arrays | no |
+| `ModelVolume` / `ModelInstance` `.offset`, `.rotation`, `.scaling_factor`, `.mirror` | unknown | Transforms that may not need numpy arrays | no |
+| `Print.objects`, `PrintObject.layers`, `Layer.print_z`, `slice_z`, `lslices` | unknown | Sliced layers may be readable in a slicing step: layer heights and pocket outlines without parsing G-code | no |
+| `orca.host.plater()` | `-> Plater` with `project_path()`, `is_project_dirty()`, `export_3mf_copy(path)` | Project path | no |
+| `push_notification` | `(notification_level, text, hyper_text='', on_click=None)` | A clickable "open the Nuts tab" link in notifications | no |
+| `orca.host.ui.message` | `(text, title, buttons, icon) -> str` | A modal message box | no |
+| Events `SliceStarted`, `GCodeExportStarted`, `PlateSelected`, `SlicingJobComplete` | on `LifecycleEvent` | Refresh the report right before slicing | no |
+| `get_config_ui`, `has_config_ui`, `get_config_version` | on every capability base | Orca may host a settings page for a capability | no |
+
+Also confirmed: `volume.name` and `object.name` are properties, not methods. Each run of
+a script action gets a new background thread (`Dummy-2`, `Dummy-3`).
 
 ## Still open
 
 | Question | Answer |
 | --- | --- |
-| What raised the 99 permission prompts? | Reading the model or its meshes, not `print()`: probe 0.4.0 prints nothing and step 2 flooded again. The prompt names no file ("does not expose a target the audit hook can display") and offers only Yes or No, with no way to remember the answer. Which call, and whether it is the numpy import, is pending: probe 0.5.0 step 3 |
+| Which call raises the permission flood? | Reading names and matrices is enough (probe 0.5.0 step 2), so it is not only meshes. Matrices come back as numpy arrays, which fits "the first numpy use imports numpy, one prompt per file", but that is not proven. Probe 0.6.0 logs each call before making it |
+| Can `request_permissions` stop the flood, and with which paths? | pending: full docstring in probe 0.6.0 step 1 |
 | May a slicing step read the model from its worker thread? | pending |
 | How do bed coordinates map to G-code coordinates on plates after the first? | pending |
 | Setting keys for G-code flavor and print order, and their values | pending |
-| Is `volume.name` an attribute or a method? | pending |
 
 ## Differences from the spec
 

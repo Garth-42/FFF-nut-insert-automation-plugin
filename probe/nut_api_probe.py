@@ -6,14 +6,16 @@
 # name = "Nut API probe"
 # description = "Shows what the plugin API exposes. Changes nothing, opens no files."
 # author = "nut-inserter"
-# version = "0.5.0"
+# version = "0.6.0"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
-It changes nothing and, by default, opens no files and prints nothing: in
-OrcaSlicer 2.5.0 every file a plugin opens raises a permission prompt, and
-print() appears to count. Everything is kept in memory instead and shown in
-the "Nut probe" tab, where you can copy it. See docs/manual-test.md.
+It changes nothing, opens no files itself and prints nothing. Everything is
+kept in memory and shown in the "Nut probe" tab, where you can copy it.
+
+The steps are separate script actions, ordered from harmless to "may raise
+permission prompts", so the output shows which call Orca objects to.
+See docs/manual-test.md.
 """
 
 import sys
@@ -22,19 +24,16 @@ import threading
 import orca
 
 PREFIX = "NUTPROBE"
-PRINT = False          # True also prints each line; in 2.5.0 that raised a prompt per line
-READ_GCODE = False     # True reads the exported G-code once; that opens one file
 MAX_PER_EVENT = 2      # keep each kind of lifecycle event this many times
 MAX_LINES = 4000
 
 LINES = []             # the probe's whole output, in memory
+DONE = set()           # sections already recorded, so a second run adds nothing
 
 
 def log(*parts):
     if len(LINES) < MAX_LINES:
         LINES.append(" ".join([PREFIX, *[str(p) for p in parts]]))
-    if PRINT:
-        print(PREFIX, *parts, flush=True)
 
 
 def log_error(where, exc):
@@ -55,21 +54,26 @@ def safe(label, fn):
         log(label, "FAILED", repr(exc))
 
 
-def modules_step(label, fn):
-    """Run fn and record which Python modules it caused to be imported.
+def step(label, fn):
+    """Run fn, record its result and which Python modules it caused to be imported.
 
     Importing a module opens files, and Orca prompts for each one, so this
     shows which call is behind a flood of prompts. It opens nothing itself.
+    The line before the call is written first, so a call that never returns
+    still leaves its name in the output.
     """
     before = set(sys.modules)
-    log(">>", label, "| numpy loaded before:", "numpy" in before)
+    log("call", label)
     try:
         value = fn()
+        shown = repr(value)
+        log("  ->", shown if len(shown) < 300 else shown[:300] + "...")
     except Exception as exc:  # noqa: BLE001
-        log_error(label, exc)
+        log("  -> FAILED", repr(exc))
         value = None
     new = sorted(set(sys.modules) - before)
-    log("<<", label, "| new modules:", len(new), new[:40])
+    if new:
+        log("  -> imported", len(new), "modules:", new[:30])
     return value
 
 
@@ -81,110 +85,131 @@ def thread_name():
     return threading.current_thread().name
 
 
-def dump_api():
-    log("== api ==")
-    safe("dir orca", lambda: names(orca))
-    safe("dir orca.host", lambda: names(orca.host))
-    safe("dir orca.host.ui", lambda: names(orca.host.ui))
-    safe("dir orca.slicing.Step", lambda: names(orca.slicing.Step))
-    safe("dir orca.LifecycleEvent", lambda: names(orca.LifecycleEvent))
-    safe("dir orca.ExecutionResult", lambda: names(orca.ExecutionResult))
-    safe("dir orca.PluginResult", lambda: names(orca.PluginResult))
-
-
-def doc(label, getter):
+def doc(label, getter, limit=700):
     """Record a docstring. pybind11 puts the call signature in it."""
     try:
         text = " | ".join(str(getter().__doc__ or "").split("\n"))
-        log("doc", label, "=", text[:600])
+        log("doc", label, "=", text[:limit])
     except Exception as exc:  # noqa: BLE001
         log("doc", label, "FAILED", repr(exc))
 
 
-def dump_docs():
-    """Signatures and members of things the first probe run found but the docs do not list."""
-    log("== docs ==")
-    for name in ("request_permissions", "register_capability"):
-        doc("orca." + name, lambda n=name: getattr(orca, n))
-    for name in ("model", "plater", "plugin", "preset_bundle", "app_info", "selected_printer"):
-        doc("orca.host." + name, lambda n=name: getattr(orca.host, n))
-    for name in ("create_dock_panel", "create_window", "push_notification", "message"):
-        doc("orca.host.ui." + name, lambda n=name: getattr(orca.host.ui, n))
-    for name in ("Model", "ModelObject", "ModelVolume", "ModelVolumeType", "ModelInstance",
-                 "TriangleMesh", "Plater", "Print", "PrintObject", "Layer"):
-        safe("dir orca.host." + name, lambda n=name: names(getattr(orca.host, n)))
-    for name in ("PluginContext", "LifecycleEventContext", "PluginType", "SlicingPipeline",
-                 "Script", "Pages", "PythonPluginBase"):
-        safe("dir orca." + name, lambda n=name: names(getattr(orca, n)))
-    for name in ("ScriptPluginCapabilityBase",):
-        safe("dir orca.script." + name, lambda n=name: names(getattr(orca.script, n)))
-    safe("dir orca.slicing", lambda: names(orca.slicing))
-    safe("dir orca.pages", lambda: names(orca.pages))
-    for cls, members in (("ModelVolume", ("type", "is_modifier", "is_model_part", "name")),
-                         ("Plater", None), ("Model", None), ("ModelObject", None)):
-        try:
-            target = getattr(orca.host, cls)
-            for member in members or names(target):
-                doc(f"orca.host.{cls}.{member}", lambda t=target, m=member: getattr(t, m))
-        except Exception as exc:  # noqa: BLE001
-            log("doc", cls, "FAILED", repr(exc))
-
-
-def dump_model(where, with_mesh=False):
-    """Record names, matrices and types. Meshes only on request: they need numpy."""
-    log("== model from", where, "thread", thread_name(), "==")
-    try:
-        objects = list(orca.host.model().objects())
-    except Exception as exc:  # noqa: BLE001
-        log("model read FAILED", repr(exc))
+def doc_members(owner_label, owner, limit=400):
+    if owner is None:
+        log("doc", owner_label, "is missing")
         return
-    log("object count =", len(objects))
+    try:
+        for member in names(owner):
+            if not member.startswith("_"):
+                doc(f"{owner_label}.{member}", lambda m=member: getattr(owner, m), limit)
+    except Exception as exc:  # noqa: BLE001
+        log("doc", owner_label, "FAILED", repr(exc))
+
+
+def dump_docs():
+    """Signatures the earlier runs did not capture, or captured cut short."""
+    log("== docs, round 2 ==")
+    doc("orca.request_permissions", lambda: orca.request_permissions, limit=6000)
+    doc("orca.host.ui.create_dock_panel", lambda: orca.host.ui.create_dock_panel, limit=3000)
+    for name in ("UiDockPanel", "UiWindow"):
+        safe("dir orca.host.ui." + name, lambda n=name: names(getattr(orca.host.ui, n)))
+        doc_members("orca.host.ui." + name, getattr(orca.host.ui, name, None))
+    safe("dir orca.host.BoundingBox", lambda: names(orca.host.BoundingBox))
+    for name in ("TriangleMesh", "ModelVolume", "ModelInstance", "BoundingBox", "Layer",
+                 "Print", "PrintObject"):
+        doc_members("orca.host." + name, getattr(orca.host, name, None))
+    safe("dir SlicingPipelineContext", lambda: names(orca.slicing.SlicingPipelineContext))
+    doc_members("SlicingPipelineContext", getattr(orca.slicing, "SlicingPipelineContext", None))
+    doc_members("LifecycleEventContext", getattr(orca, "LifecycleEventContext", None))
+    doc_members("PythonPluginBase", getattr(orca, "PythonPluginBase", None), limit=600)
+    doc("orca.slicing.unscale", lambda: orca.slicing.unscale)
+    doc("orca.host.plugin", lambda: orca.host.plugin, limit=1500)
+    safe("dir orca.host.plugin", lambda: names(orca.host.plugin))
+    safe("app_info", lambda: orca.host.app_info())
+    safe("sys.version", lambda: sys.version)
+    safe("numpy already loaded", lambda: "numpy" in sys.modules)
+    safe("sys.path", lambda: list(sys.path))
+
+
+def first_volume():
+    return orca.host.model().objects()[0].volumes()[0]
+
+
+def dump_model():
+    """Names, types and plate index, one call at a time. Nothing here should need numpy."""
+    log("== model, thread", thread_name(), "==")
+    model = step("host.model()", orca.host.model)
+    if model is None:
+        return
+    step("model.object_count()", lambda: model.object_count())
+    step("model.current_plate_index()", lambda: model.current_plate_index())
+    objects = step("model.objects()", model.objects) or []
     for oi, obj in enumerate(objects):
-        try:
-            volumes = list(obj.volumes())
-            instances = list(obj.instances())
-            if oi == 0:
-                log("dir object =", names(obj))
-                if volumes:
-                    log("dir volume =", names(volumes[0]))
-                if instances:
-                    log("dir instance =", names(instances[0]))
-            log("object", oi, "volumes", len(volumes), "instances", len(instances))
-            for vi, vol in enumerate(volumes):
-                log("object", oi, "volume", vi, "name =", repr(vol.name))
-                if oi == 0 and vi == 0:
-                    modules_step("vol.matrix()", lambda v=vol: log("  matrix type",
-                                                                   type(v.matrix()).__name__))
-                safe("  volume matrix", lambda v=vol: v.matrix().tolist())
-                # Part type is not documented. Record anything that looks like it.
-                for attr in names(vol):
-                    if "type" in attr.lower() or "modifier" in attr.lower():
-                        safe(f"  volume.{attr}", lambda v=vol, a=attr: _value(getattr(v, a)))
-                if with_mesh and oi == 0 and vi == 0:
-                    dump_mesh(vol)
-            for ii, inst in enumerate(instances):
-                safe(f"object {oi} instance {ii} matrix", lambda i=inst: i.matrix().tolist())
-                safe(f"object {oi} instance {ii} left handed", lambda i=inst: i.is_left_handed())
-        except Exception as exc:  # noqa: BLE001
-            log_error(f"object {oi}", exc)
+        step(f"object {oi} name", lambda o=obj: o.name)
+        step(f"object {oi} printable", lambda o=obj: o.printable)
+        step(f"object {oi} instance_count()", lambda o=obj: o.instance_count())
+        volumes = step(f"object {oi} volumes()", obj.volumes) or []
+        for vi, vol in enumerate(volumes):
+            where = f"object {oi} volume {vi}"
+            step(where + " name", lambda v=vol: v.name)
+            step(where + " type()", lambda v=vol: v.type())
+            step(where + " is_modifier()", lambda v=vol: v.is_modifier())
+            step(where + " is_model_part()", lambda v=vol: v.is_model_part())
+            step(where + " facets_count()", lambda v=vol: v.facets_count())
 
 
-def dump_mesh(vol):
-    """One call at a time, so the log shows which one imports modules or fails."""
-    mesh = modules_step("vol.mesh()", vol.mesh)
+def dump_transforms():
+    """Matrices and offsets, one call at a time. These may return numpy arrays."""
+    log("== transforms, thread", thread_name(), "==")
+    obj = orca.host.model().objects()[0]
+    vol, inst = obj.volumes()[0], obj.instances()[0]
+    step("instance.is_left_handed()", inst.is_left_handed)
+    for label, target in (("volume", vol), ("instance", inst)):
+        for member in ("bounding_box", "scaling_factor", "mirror", "offset", "rotation"):
+            step(f"{label}.{member}", lambda t=target, m=member: _value(getattr(t, m)))
+    matrix = step("volume.matrix()", vol.matrix)
+    step("type(volume.matrix())", lambda: type(matrix).__name__)
+    step("instance.matrix()", inst.matrix)
+
+
+def dump_mesh_plain():
+    """One mesh through the accessors that should not need numpy arrays."""
+    log("== mesh, plain accessors, thread", thread_name(), "==")
+    mesh = step("volume.mesh()", first_volume().mesh)
     if mesh is None:
         return
-    safe("dir mesh", lambda: names(mesh))
-    verts = modules_step("mesh.vertices()", mesh.vertices)
-    tris = modules_step("mesh.triangles()", mesh.triangles)
+    for member in ("vertex_count", "triangle_count", "facets_count", "is_empty", "volume",
+                   "bounding_box"):
+        step(f"mesh.{member}", lambda m=member: _value(getattr(mesh, m)))
+    vertex = step("mesh.vertex(0)", lambda: mesh.vertex(0))
+    step("type(mesh.vertex(0))", lambda: type(vertex).__name__)
+    step("list(mesh.vertex(0))", lambda: [float(c) for c in vertex])
+    triangle = step("mesh.triangle(0)", lambda: mesh.triangle(0))
+    step("type(mesh.triangle(0))", lambda: type(triangle).__name__)
+
+
+def dump_numpy():
+    log("== import numpy, thread", thread_name(), "==")
+    numpy = step("import numpy", lambda: __import__("numpy"))
+    if numpy is not None:
+        step("numpy.__version__", lambda: numpy.__version__)
+        step("numpy.__file__", lambda: numpy.__file__)
+
+
+def dump_mesh_arrays():
+    log("== mesh arrays, thread", thread_name(), "==")
+    mesh = step("volume.mesh()", first_volume().mesh)
+    if mesh is None:
+        return
+    verts = step("mesh.vertices()", lambda: mesh.vertices())
+    tris = step("mesh.triangles()", lambda: mesh.triangles())
+    step("mesh.face_normals()", lambda: mesh.face_normals())
     if verts is not None:
-        safe("vertices type", lambda: type(verts).__name__)
-        safe("vertices shape dtype", lambda: (verts.shape, str(verts.dtype)))
-        safe("vertices writeable", lambda: bool(verts.flags.writeable))
-        modules_step("verts.min/max", lambda: log("bounds =", verts.min(axis=0).tolist(),
-                                                  verts.max(axis=0).tolist()))
+        step("vertices shape, dtype, writeable",
+             lambda: (verts.shape, str(verts.dtype), bool(verts.flags.writeable)))
+        step("vertices bounds", lambda: (verts.min(axis=0).tolist(), verts.max(axis=0).tolist()))
     if tris is not None:
-        safe("triangles shape dtype", lambda: (tris.shape, str(tris.dtype)))
+        step("triangles shape, dtype", lambda: (tris.shape, str(tris.dtype)))
 
 
 def _value(attr):
@@ -203,33 +228,33 @@ def dump_ctx(ctx):
             log("  ctx." + name, "FAILED", repr(exc))
 
 
-def result(text):
-    return orca.ExecutionResult.success(text + " Open the Nut probe tab to copy the output.")
+def run_script(name, fn):
+    """Body of every script action: run once, never raise."""
+    try:
+        log("script", name, "thread", thread_name())
+        if name in DONE:
+            log("script", name, "already recorded")
+        else:
+            DONE.add(name)
+            fn()
+        return orca.ExecutionResult.success(
+            name + " recorded. Open the Nut probe tab, press Refresh and copy the output.")
+    except Exception as exc:  # noqa: BLE001
+        log_error("script " + name, exc)
+        return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
 
 
-class ProbeApi(orca.script.ScriptPluginCapabilityBase):
-    """Step 1: the API surface only. Touches neither the model nor numpy."""
-
+class Probe1(orca.script.ScriptPluginCapabilityBase):
     _event_counts = {}
 
     def get_name(self):
-        return "Nut API probe: 1 API"
+        return "Nut probe 1: signatures"
 
     def on_load(self):
-        try:
-            log("on_load script capability, thread", thread_name())
-        except Exception as exc:  # noqa: BLE001
-            log_error("on_load", exc)
+        log("on_load, thread", thread_name())
 
     def execute(self):
-        try:
-            log("script 1 execute, thread", thread_name())
-            dump_api()
-            dump_docs()
-            return result("API recorded.")
-        except Exception as exc:  # noqa: BLE001
-            log_error("script 1", exc)
-            return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
+        return run_script("1 signatures", dump_docs)
 
     def on_lifecycle_event(self, event, ctx):
         try:
@@ -244,165 +269,114 @@ class ProbeApi(orca.script.ScriptPluginCapabilityBase):
             log_error("event", exc)
 
 
-class ProbeModel(orca.script.ScriptPluginCapabilityBase):
-    """Step 2: names, matrices and types. No meshes."""
-
+class Probe2(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
-        return "Nut API probe: 2 model, no meshes"
+        return "Nut probe 2: model names and types"
 
     def execute(self):
-        try:
-            log("script 2 execute, thread", thread_name())
-            modules_step("whole step 2", lambda: dump_model("script"))
-            return result("Model recorded.")
-        except Exception as exc:  # noqa: BLE001
-            log_error("script 2", exc)
-            return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
+        return run_script("2 model", dump_model)
 
 
-class ProbeMesh(orca.script.ScriptPluginCapabilityBase):
-    """Step 3: one mesh, one call at a time. In 2.5.0 this is where prompts flooded."""
-
+class Probe3(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
-        return "Nut API probe: 3 mesh (may prompt)"
+        return "Nut probe 3: mesh without arrays"
 
     def execute(self):
-        try:
-            log("script 3 execute, thread", thread_name())
-            volume = orca.host.model().objects()[0].volumes()[0]
-            dump_mesh(volume)
-            return result("Mesh recorded.")
-        except Exception as exc:  # noqa: BLE001
-            log_error("script 3", exc)
-            return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
+        return run_script("3 mesh plain", dump_mesh_plain)
+
+
+class Probe4(orca.script.ScriptPluginCapabilityBase):
+    def get_name(self):
+        return "Nut probe 4: transforms (may prompt)"
+
+    def execute(self):
+        return run_script("4 transforms", dump_transforms)
+
+
+class Probe5(orca.script.ScriptPluginCapabilityBase):
+    def get_name(self):
+        return "Nut probe 5: import numpy (may prompt)"
+
+    def execute(self):
+        return run_script("5 numpy", dump_numpy)
+
+
+class Probe6(orca.script.ScriptPluginCapabilityBase):
+    def get_name(self):
+        return "Nut probe 6: mesh arrays (may prompt)"
+
+    def execute(self):
+        return run_script("6 mesh arrays", dump_mesh_arrays)
 
 
 PAGE = """<!doctype html><html><body style="font-family:sans-serif;padding:12px;margin:0">
 <h3 style="margin:0 0 8px">Nut API probe</h3>
 <p style="margin:0 0 8px">Press Refresh after each step, then Select all and copy the text.</p>
 <button id="refresh">Refresh</button> <button id="select">Select all</button>
-<span id="state"></span>
+<button id="clear">Clear</button> <span id="state"></span>
 <textarea id="out" readonly spellcheck="false"
   style="display:block;width:100%;height:75vh;margin-top:8px;font:12px monospace"></textarea>
 <script>
 var out = document.getElementById('out'), state = document.getElementById('state');
-var page = [];
-function show(text) { out.value = page.join('\\n') + '\\n' + text; }
 function start() {
   if (!window.orca) { state.textContent = 'window.orca missing, retrying'; setTimeout(start, 200); return; }
-  var gl = null;
-  try { gl = document.createElement('canvas').getContext('webgl'); } catch (e) {}
-  page.push('NUTPROBE page webgl = ' + (!!gl));
-  page.push('NUTPROBE page agent = ' + navigator.userAgent);
   window.orca.onMessage(function (m) {
-    var kind = typeof m;
-    var line = 'NUTPROBE page received a message as ' + kind;
-    if (page.indexOf(line) < 0) { page.push(line); }
-    if (kind === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
-    if (m && m.text != null) { show(m.text); state.textContent = 'Updated ' + new Date().toLocaleTimeString(); }
+    if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
+    if (m && m.text != null) { out.value = m.text; state.textContent = 'Updated ' + new Date().toLocaleTimeString(); }
   });
   window.orca.postMessage({type: 'ready'});
 }
 document.getElementById('refresh').onclick = function () { window.orca.postMessage({type: 'refresh'}); };
+document.getElementById('clear').onclick = function () { window.orca.postMessage({type: 'clear'}); };
 document.getElementById('select').onclick = function () { out.focus(); out.select(); };
 start();
 </script></body></html>"""
 
 
 class ProbePage(orca.pages.PagesPluginCapabilityBase):
-    _logged_type = False
-
     def get_name(self):
         return "Nut probe"
 
     def get_ui(self):
-        log("page get_ui, thread", thread_name())
         return PAGE
 
     def on_message(self, data):
         try:
-            if not self._logged_type:
-                ProbePage._logged_type = True
-                log("page on_message type", type(data).__name__, "value", repr(data)[:200],
-                    "thread", thread_name())
-            text = "\n".join(LINES)
-            # Whether pages take objects or JSON strings is not documented: try both.
-            try:
-                self.post_message({"type": "log", "text": text})
-            except Exception as exc:  # noqa: BLE001
-                log("post_message(dict) FAILED", repr(exc))
-            try:
-                self.post_message('{"type": "log", "text": ' + _json_string(text) + "}")
-            except Exception as exc:  # noqa: BLE001
-                log("post_message(str) FAILED", repr(exc))
+            if isinstance(data, dict) and data.get("type") == "clear":
+                LINES.clear()
+            self.post_message({"type": "log", "text": "\n".join(LINES)})
         except Exception as exc:  # noqa: BLE001
             log_error("page", exc)
-
-
-def _json_string(text):
-    """A JSON string literal, without importing json."""
-    out = ['"']
-    for ch in text:
-        if ch in '"\\':
-            out.append("\\" + ch)
-        elif ch == "\n":
-            out.append("\\n")
-        elif ord(ch) < 32:
-            out.append(" ")
-        else:
-            out.append(ch)
-    out.append('"')
-    return "".join(out)
 
 
 class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
     _seen = set()
 
     def get_name(self):
-        return "Nut API probe: slicing"
-
-    def get_default_config(self):
-        return {"probe": True, "nested": {"list": [1, 2]}}
-
-    def on_load(self):
-        try:
-            log("on_load slicing capability, thread", thread_name())
-            safe("get_config type and value", lambda: (type(self.get_config()).__name__,
-                                                       self.get_config()))
-        except Exception as exc:  # noqa: BLE001
-            log_error("on_load slicing", exc)
+        return "Nut probe: slicing"
 
     def execute(self, ctx):
         try:
-            step = ctx.step
-            if str(step) not in self._seen:
-                self._seen.add(str(step))
-                log("slicing step", step, "thread", thread_name())
+            current = ctx.step
+            if str(current) not in self._seen:
+                self._seen.add(str(current))
+                log("== slicing step", current, "thread", thread_name(), "==")
                 dump_ctx(ctx)
-                for key in ("gcode_flavor", "print_sequence", "printable_area", "layer_height"):
-                    safe(f"config_value {key}", lambda k=key: repr(ctx.config_value(k)))
-                dump_model(f"slicing step {step}")   # no meshes
-                if step == orca.slicing.Step.psGCodePostProcess:
+                for key in ("gcode_flavor", "print_sequence", "layer_height", "curr_bed_type"):
+                    step(f"config_value {key}", lambda k=key: ctx.config_value(k))
+                step("model names from slicing thread", lambda: [
+                    (obj.name, [v.name for v in obj.volumes()])
+                    for obj in orca.host.model().objects()])
+                if current == orca.slicing.Step.psGCodePostProcess:
                     log("gcode_path =", repr(ctx.gcode_path))
-                    if READ_GCODE:
-                        self._dump_gcode(ctx)
         except Exception as exc:  # noqa: BLE001
             log_error("slicing", exc)
         return orca.ExecutionResult.success()
-
-    def _dump_gcode(self, ctx):
-        with open(ctx.gcode_path, encoding="utf-8", errors="replace") as handle:
-            lines = handle.read().splitlines()
-        log("gcode line count =", len(lines))
-        for i, line in enumerate(lines[:60]):
-            log(f"gcode {i + 1:6d}: {line}")
 
 
 @orca.plugin
 class NutApiProbe(orca.base):
     def register_capabilities(self):
-        orca.register_capability(ProbeApi)
-        orca.register_capability(ProbeModel)
-        orca.register_capability(ProbeMesh)
-        orca.register_capability(ProbePage)
-        orca.register_capability(ProbeSlicing)
+        for capability in (Probe1, Probe2, Probe3, Probe4, Probe5, Probe6, ProbePage,
+                           ProbeSlicing):
+            orca.register_capability(capability)
