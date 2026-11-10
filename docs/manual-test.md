@@ -18,10 +18,18 @@ uv build
 
 ## Checks
 
-- [ ] **Probe.** Install `probe/nut_api_probe.py`. Open a project with a two-body STEP,
-  a part plus `NUT_M3SQ`. Run "Nut API probe: dump" from the Plugins window and open the
-  "Nut probe" tab once. Move the object, slice, and export G-code. Save the newest Python
-  log as `docs/probe-log.txt`, and the exported file as `tests/data/sample.gcode`.
+- [ ] **Probe.** Install `probe/nut_api_probe.py` (version 0.3.0 or later). It opens no
+  files and prints nothing, because in OrcaSlicer 2.5.0 each of those raised a permission
+  prompt. Its output is shown in its own tab instead.
+
+  1. Open a project with a two-body STEP: a part plus `NUT_M3SQ`.
+  2. Run "Nut API probe: 1 API" from the Plugins window. Note whether any prompt appears.
+  3. Run "Nut API probe: 2 model". Note whether any prompt appears.
+  4. Move the object, slice, and export G-code.
+  5. Open the "Nut probe" tab, press Refresh, Select all, copy, and save the text as
+     `docs/probe-log.txt`.
+  6. Save the exported G-code file as `tests/data/sample.gcode`.
+
   Then fill `docs/api-facts.md` from the lines that start with `NUTPROBE`.
 
   Result:
