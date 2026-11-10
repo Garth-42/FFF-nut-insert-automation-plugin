@@ -138,6 +138,18 @@ INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 Z_LOW=1.000 YAW=0.00 
   file, version included. So after installing a newer wheel the plugin most likely has to
   be added to the process preset again. Not yet observed.
 
+The panel's Activity list from that run:
+
+- **Checks took 5 to 13 ms** on the real part, well inside the 100 ms event budget. Model
+  events arrive in bursts (several checks in one second while the part is edited).
+- **Steps that reached the plugin, in order:** `posSlice`, `posPerimeters`,
+  `posPrepareInfill`, `posInfill`, `posIroning`, `posSupportMaterial`,
+  `posDetectOverhangsForLift`, `psWipeTower`, `psSkirtBrim`, `posSimplifyPath`, and six
+  seconds later `psGCodePostProcess`. The slice gate at `posSlice` passed.
+- **`ctx.gcode_path` is a working copy in the system temp folder**:
+  `<tmp>/orcaslicer_501/orcaslicer_model/<day>/<session>/Metadata/.22851.0.gcode.pp`.
+  The plugin edits that, and Orca then writes the user's file from it.
+
 ## Still open
 
 | Question | How it gets answered |
