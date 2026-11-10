@@ -6,7 +6,7 @@
 # name = "Nut API probe"
 # description = "Shows what the plugin API exposes. Changes nothing, opens no files."
 # author = "nut-inserter"
-# version = "0.3.0"
+# version = "0.4.0"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
@@ -71,6 +71,44 @@ def dump_api():
     safe("dir orca.LifecycleEvent", lambda: names(orca.LifecycleEvent))
     safe("dir orca.ExecutionResult", lambda: names(orca.ExecutionResult))
     safe("dir orca.PluginResult", lambda: names(orca.PluginResult))
+
+
+def doc(label, getter):
+    """Record a docstring. pybind11 puts the call signature in it."""
+    try:
+        text = " | ".join(str(getter().__doc__ or "").split("\n"))
+        log("doc", label, "=", text[:600])
+    except Exception as exc:  # noqa: BLE001
+        log("doc", label, "FAILED", repr(exc))
+
+
+def dump_docs():
+    """Signatures and members of things the first probe run found but the docs do not list."""
+    log("== docs ==")
+    for name in ("request_permissions", "register_capability"):
+        doc("orca." + name, lambda n=name: getattr(orca, n))
+    for name in ("model", "plater", "plugin", "preset_bundle", "app_info", "selected_printer"):
+        doc("orca.host." + name, lambda n=name: getattr(orca.host, n))
+    for name in ("create_dock_panel", "create_window", "push_notification", "message"):
+        doc("orca.host.ui." + name, lambda n=name: getattr(orca.host.ui, n))
+    for name in ("Model", "ModelObject", "ModelVolume", "ModelVolumeType", "ModelInstance",
+                 "TriangleMesh", "Plater", "Print", "PrintObject", "Layer"):
+        safe("dir orca.host." + name, lambda n=name: names(getattr(orca.host, n)))
+    for name in ("PluginContext", "LifecycleEventContext", "PluginType", "SlicingPipeline",
+                 "Script", "Pages", "PythonPluginBase"):
+        safe("dir orca." + name, lambda n=name: names(getattr(orca, n)))
+    for name in ("ScriptPluginCapabilityBase",):
+        safe("dir orca.script." + name, lambda n=name: names(getattr(orca.script, n)))
+    safe("dir orca.slicing", lambda: names(orca.slicing))
+    safe("dir orca.pages", lambda: names(orca.pages))
+    for cls, members in (("ModelVolume", ("type", "is_modifier", "is_model_part", "name")),
+                         ("Plater", None), ("Model", None), ("ModelObject", None)):
+        try:
+            target = getattr(orca.host, cls)
+            for member in members or names(target):
+                doc(f"orca.host.{cls}.{member}", lambda t=target, m=member: getattr(t, m))
+        except Exception as exc:  # noqa: BLE001
+            log("doc", cls, "FAILED", repr(exc))
 
 
 def dump_model(where):
@@ -157,6 +195,7 @@ class ProbeApi(orca.script.ScriptPluginCapabilityBase):
         try:
             log("script 1 execute, thread", thread_name())
             dump_api()
+            dump_docs()
             return result("API recorded.")
         except Exception as exc:  # noqa: BLE001
             log_error("script 1", exc)

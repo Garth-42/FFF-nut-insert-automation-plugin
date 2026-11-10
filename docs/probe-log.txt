@@ -1,0 +1,23 @@
+# Probe output, copied from the "Nut probe" tab by Garth.
+# OrcaSlicer 2.5.0 build 40ecc66f, macOS. Probe 0.3.0.
+
+## Run 1, 10 Nov 2026: after "Nut API probe: 1 API"
+
+NUTPROBE page webgl = true
+NUTPROBE page agent = Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) BBL-Slicer/v01.10.01.50 (dark) BBL-Language/en
+NUTPROBE page received a message as object
+NUTPROBE page received a message as string
+NUTPROBE on_load script capability, thread Dummy-1
+NUTPROBE on_load slicing capability, thread Dummy-1
+NUTPROBE get_config type and value = ('str', '{}')
+NUTPROBE script 1 execute, thread Dummy-1
+NUTPROBE == api ==
+NUTPROBE dir orca = ['Analysis', 'DeviceDiscovered', 'DeviceOffline', 'DeviceOnline', 'DeviceSelected', 'Error', 'ExecutionResult', 'Exporter', 'FatalError', 'GCodeExportFinished', 'GCodeExportStarted', 'Importer', 'LifecycleEvent', 'LifecycleEventContext', 'LifecycleEvtCode', 'NewProject', 'ObjectAdded', 'ObjectChanged', 'ObjectDeleted', 'ObjectRenamed', 'ObjectTransformed', 'Ok', 'Pages', 'PlateCreated', 'PlateDeleted', 'PlateRenamed', 'PlateSelected', 'PluginContext', 'PluginResult', 'PluginType', 'PresetSaved', 'PresetSelected', 'PrintJobFinished', 'PrintJobStarted', 'PrintStateChanged', 'PrinterConnection', 'ProjectAfterSave', 'ProjectBeforeSave', 'ProjectClosed', 'ProjectDirtyChanged', 'ProjectOpened', 'PythonPluginBase', 'RecoverableError', 'ResourceTexture', 'Script', 'SendJobFinished', 'SendJobStarted', 'Skipped', 'SliceGeometryFinished', 'SliceStarted', 'SlicingJobComplete', 'SlicingPipeline', 'Success', 'Unknown', 'UploadFinished', 'UploadStarted', 'Visualization', 'Warn', 'base', 'host', 'pages', 'plugin', 'printer_agent', 'register_capability', 'request_permissions', 'resource_texture', 'script', 'slicing']
+NUTPROBE dir orca.host = ['BoundingBox', 'ExPolygon', 'ExtrusionEntity', 'ExtrusionEntityCollection', 'ExtrusionLoop', 'ExtrusionMultiPath', 'ExtrusionPath', 'Layer', 'LayerRegion', 'Model', 'ModelInstance', 'ModelObject', 'ModelVolume', 'ModelVolumeType', 'Plater', 'Point', 'Polygon', 'Preset', 'PresetBundle', 'PresetCollection', 'PresetType', 'Print', 'PrintObject', 'PrintRegion', 'Surface', 'SurfaceCollection', 'SurfaceType', 'TriangleMesh', 'app_info', 'gl_info', 'model', 'plater', 'plugin', 'preset', 'preset_bundle', 'selected_printer', 'stBottom', 'stBottomBridge', 'stCount', 'stInternal', 'stInternalAfterExternalBridge', 'stInternalBridge', 'stInternalSolid', 'stInternalVoid', 'stPerimeter', 'stSecondInternalBridge', 'stTop', 'ui']
+NUTPROBE dir orca.host.ui = ['ErrorNotificationLevel', 'HintNotificationLevel', 'ImportantNotificationLevel', 'NotificationLevel', 'PD_APP_MODAL', 'PD_AUTO_HIDE', 'PD_CAN_ABORT', 'PD_CAN_SKIP', 'PD_ELAPSED_TIME', 'PD_ESTIMATED_TIME', 'PD_REMAINING_TIME', 'PrintInfoNotificationLevel', 'PrintInfoShortNotificationLevel', 'ProgressBarNotificationLevel', 'ProgressDialog', 'RegularNotificationLevel', 'SeriousWarningNotificationLevel', 'UiDockPanel', 'UiWindow', 'WINDOW_MODAL', 'WINDOW_MODELESS', 'WarningNotificationLevel', 'create_dock_panel', 'create_progress_dialog', 'create_window', 'message', 'push_notification']
+NUTPROBE dir orca.slicing.Step = ['_pybind11_conduit_v1_', 'name', 'posContouring', 'posDetectOverhangsForLift', 'posEstimateCurledExtrusions', 'posInfill', 'posIroning', 'posPerimeters', 'posPrepareInfill', 'posSimplifyPath', 'posSlice', 'posSupportMaterial', 'psGCodePostProcess', 'psSkirtBrim', 'psWipeTower', 'value']
+NUTPROBE dir orca.LifecycleEvent = ['DeviceDiscovered', 'DeviceOffline', 'DeviceOnline', 'DeviceSelected', 'GCodeExportFinished', 'GCodeExportStarted', 'NewProject', 'ObjectAdded', 'ObjectChanged', 'ObjectDeleted', 'ObjectRenamed', 'ObjectTransformed', 'PlateCreated', 'PlateDeleted', 'PlateRenamed', 'PlateSelected', 'PresetSaved', 'PresetSelected', 'PrintJobFinished', 'PrintJobStarted', 'PrintStateChanged', 'ProjectAfterSave', 'ProjectBeforeSave', 'ProjectClosed', 'ProjectDirtyChanged', 'ProjectOpened', 'SendJobFinished', 'SendJobStarted', 'SliceGeometryFinished', 'SliceStarted', 'SlicingJobComplete', 'UploadFinished', 'UploadStarted', '_pybind11_conduit_v1_', 'name', 'value']
+NUTPROBE dir orca.ExecutionResult = ['_pybind11_conduit_v1_', 'data', 'failure', 'message', 'skipped', 'status', 'success']
+NUTPROBE dir orca.PluginResult = ['FatalError', 'RecoverableError', 'Skipped', 'Success', '_pybind11_conduit_v1_', 'name', 'value']
+NUTPROBE page get_ui, thread MainThread
+NUTPROBE page on_message type dict value {'type': 'ready'} thread MainThread
