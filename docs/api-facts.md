@@ -11,7 +11,8 @@ change only the `nut_inserter` package.
 | Question | Answer |
 | --- | --- |
 | Do pages receive objects or JSON strings? | Both arrive in the page. `on_message` gets a `dict` in Python. `POST_AS_JSON_STRING = False` is right |
-| Which thread runs what? | `get_ui` and `on_message`: `MainThread`. `on_load` and a script's `execute`: `Dummy-1`, a background thread |
+| Which thread runs what? | `get_ui`, `on_message` and lifecycle events: `MainThread`. `on_load` and a script's `execute`: a background thread (`Dummy-N`, a new one per script run) |
+| What does a lifecycle event carry? | A context with `code`, `name`, `previous_name`, `index`, `id`, `dirty`, `source`, `msg`. `ObjectAdded` gave `name = 'Configuration 1.step'` (the imported file) and `index = -1` |
 | Does `get_config()` return the default config? | No. It returned the string `'{}'` although `get_default_config()` returned a nested dict. The plugin already falls back to its own defaults in that case |
 | Does WebGL work in plugin pages? | Yes (WebKit). Not needed |
 | Do the names in the spec's API table exist? | Yes: `Step.posSlice`, `Step.psGCodePostProcess`, all eight lifecycle events, both notification levels, `create_dock_panel`, `push_notification` |

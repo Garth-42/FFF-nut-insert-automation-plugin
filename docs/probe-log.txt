@@ -105,3 +105,26 @@ NUTPROBE call mesh.triangle(0)
 NUTPROBE   -> (0, 1, 2)
 NUTPROBE call type(mesh.triangle(0))
 NUTPROBE   -> 'tuple'
+
+## Run 4, 10 Nov 2026: probe 0.6.1, startup and opening a project (no script run yet)
+
+NUTPROBE on_load, thread Dummy-1
+NUTPROBE event LifecycleEvent.ProjectDirtyChanged thread MainThread
+NUTPROBE   ctx.code = <LifecycleEvtCode.Ok: 0>
+NUTPROBE   ctx.device_id = ''
+NUTPROBE   ctx.dirty = True
+NUTPROBE   ctx.id = ''
+NUTPROBE   ctx.index = -1
+NUTPROBE   ctx.job_id = ''
+NUTPROBE   ctx.msg = ''
+NUTPROBE   ctx.name = ''
+NUTPROBE   ctx.previous_name = ''
+NUTPROBE   ctx.source = 'presets'
+NUTPROBE event LifecycleEvent.ProjectDirtyChanged thread MainThread   [same, dirty = False]
+NUTPROBE event LifecycleEvent.ObjectAdded thread MainThread
+NUTPROBE   ctx.code = <LifecycleEvtCode.Ok: 0>
+NUTPROBE   ctx.dirty = False
+NUTPROBE   ctx.index = -1
+NUTPROBE   ctx.name = 'Configuration 1.step'
+NUTPROBE   ctx.source = ''                                           [other fields empty]
+NUTPROBE event LifecycleEvent.ProjectOpened thread MainThread        [all fields empty, index -1]
