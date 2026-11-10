@@ -9,7 +9,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 90 tests pass on synthetic
+All seven milestones of the build brief are implemented. 91 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
@@ -115,6 +115,9 @@ heading of the thread axis (nut on edge or corner). TOOL is the print tool that 
 active. Templates are editable in the panel; placeholders are listed there.
 
 Before the first real insert, run the file once with the macro replaced by a pause.
+For Klipper, [`macros/klipper/insert_nut_dry_run.cfg`](macros/klipper/insert_nut_dry_run.cfg)
+is that macro: it checks the values, reports them in the console and pauses, and RESUME
+continues the print. It has not been run on a printer yet.
 
 ## The numbers are placeholders
 
@@ -129,6 +132,7 @@ src/nut_inserter/   the Orca plugin. adapter.py holds every orca.host call.
 probe/              single-file plugin that logs what Orca's plugin API exposes
 tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py
 docs/               SPEC, DECISIONS (deviations), api-facts, api-gaps, manual-test
+macros/             printer-side macros; so far a Klipper dry run of INSERT_NUT
 ```
 
 The data flow:
