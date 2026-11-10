@@ -6,7 +6,7 @@
 # name = "Nut API probe"
 # description = "Prints what the plugin API exposes. Changes nothing."
 # author = "nut-inserter"
-# version = "0.1.0"
+# version = "0.2.0"
 # ///
 """Nut API probe for OrcaSlicer 2.5.
 
@@ -15,15 +15,30 @@ log (data folder, log/python_*.log). See docs/manual-test.md for the steps.
 """
 
 import threading
-import traceback
 
 import orca
 
 PREFIX = "NUTPROBE"
+MAX_PER_EVENT = 2      # log each kind of lifecycle event this many times, then stay quiet
+READ_GCODE = True      # the only file this probe opens: the exported G-code, once
 
 
 def log(*parts):
     print(PREFIX, *parts, flush=True)
+
+
+def log_error(where, exc):
+    """Log an exception without the traceback module.
+
+    Formatting a traceback makes Python open source files to quote them, and
+    Orca asks for permission on every file a plugin opens.
+    """
+    tb = exc.__traceback__
+    line = "?"
+    while tb is not None:
+        line = tb.tb_lineno
+        tb = tb.tb_next
+    log(where, "FAILED at probe line", line, repr(exc))
 
 
 def safe(label, fn):
@@ -119,8 +134,8 @@ class ProbeDump(orca.script.ScriptPluginCapabilityBase):
             log("on_load script capability, thread", thread_name())
             dump_api()
             dump_model("on_load")
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as exc:  # noqa: BLE001
+            log_error("handler", exc)
 
     def execute(self):
         try:
@@ -129,16 +144,22 @@ class ProbeDump(orca.script.ScriptPluginCapabilityBase):
             dump_model("script")
             return orca.ExecutionResult.success("Probe written to the Python log")
         except Exception as exc:  # noqa: BLE001
-            traceback.print_exc()
+            log_error("script", exc)
             return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError, str(exc))
+
+    _event_counts = {}
 
     def on_lifecycle_event(self, event, ctx):
         try:
+            seen = self._event_counts.get(str(event), 0)
+            self._event_counts[str(event)] = seen + 1
+            if seen >= MAX_PER_EVENT:
+                return
             log("event", event, "thread", thread_name())
             if ctx is not None:
                 dump_ctx(ctx)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as exc:  # noqa: BLE001
+            log_error("handler", exc)
 
 
 PAGE = """<!doctype html><html><body style="font-family:sans-serif;padding:12px">
@@ -177,8 +198,8 @@ class ProbePage(orca.pages.PagesPluginCapabilityBase):
             if "ready" in text:
                 safe("post_message(dict)", lambda: self.post_message({"type": "as_dict"}))
                 safe("post_message(str)", lambda: self.post_message('{"type": "as_string"}'))
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as exc:  # noqa: BLE001
+            log_error("handler", exc)
 
 
 class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
@@ -195,8 +216,8 @@ class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
             log("on_load slicing capability, thread", thread_name())
             safe("get_config type and value", lambda: (type(self.get_config()).__name__,
                                                        self.get_config()))
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as exc:  # noqa: BLE001
+            log_error("handler", exc)
 
     def execute(self, ctx):
         try:
@@ -209,15 +230,16 @@ class ProbeSlicing(orca.slicing.SlicingPipelineCapabilityBase):
                 for key in ("gcode_flavor", "print_sequence", "printable_area", "layer_height"):
                     safe(f"config_value {key}", lambda k=key: repr(ctx.config_value(k)))
                 dump_model(f"slicing step {step}")
-            if step == orca.slicing.Step.psGCodePostProcess:
-                self._dump_gcode(ctx)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+            if step == orca.slicing.Step.psGCodePostProcess and first:
+                log("gcode_path =", repr(ctx.gcode_path))
+                if READ_GCODE:
+                    self._dump_gcode(ctx)
+        except Exception as exc:  # noqa: BLE001
+            log_error("handler", exc)
         return orca.ExecutionResult.success()
 
     def _dump_gcode(self, ctx):
         path = ctx.gcode_path
-        log("gcode_path =", repr(path))
         with open(path, encoding="utf-8", errors="replace") as handle:
             lines = handle.read().splitlines()
         log("gcode line count =", len(lines))
