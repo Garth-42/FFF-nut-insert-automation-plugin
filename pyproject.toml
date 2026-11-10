@@ -1,6 +1,6 @@
 [project]
 name = "nut-inserter"
-version = "0.2.0"
+version = "0.2.1"
 description = "OrcaSlicer 2.5 plugin that finds NUT_ bodies, checks their pockets and writes nut-insert commands"
 readme = "README.md"
 requires-python = ">=3.12"

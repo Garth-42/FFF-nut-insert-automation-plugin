@@ -28,8 +28,10 @@ def plugin():
     orca._fake.reset()
     state.reset()
     nut_inserter.NutInserterPlugin().register_capabilities()
+    nut_inserter._setup_pending = False
     caps = [cls() for cls in orca._fake.registered]
     for cap in caps:
+        cap._saved = '{"activated": true}'      # not the install session
         cap.on_load()
     check, tab, insert = caps
     return types.SimpleNamespace(check=check, tab=tab, insert=insert,
@@ -263,3 +265,35 @@ def test_loading_the_plugin_does_not_import_numpy():
             "assert 'numpy' not in sys.modules, 'numpy was imported at load'")
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
+
+
+def test_install_session_only_asks_for_a_restart():
+    """In the session the plugin is installed in, the granted permission is not active
+    yet, so the plugin must not touch numpy: it says "restart" and does nothing else."""
+    orca._fake.reset()
+    state.reset()
+    nut_inserter._setup_pending = False
+    orca._fake.set_model(model())
+    check, tab, insert = nut_inserter.CheckNuts(), nut_inserter.NutsTab(), nut_inserter.NutInsert()
+    for cap in (check, tab, insert):
+        cap.on_load()
+    try:
+        assert nut_inserter._setup_pending
+        assert orca._fake.panels == [] and state.report is None
+        assert len(orca._fake.notifications) == 1
+        assert "Restart OrcaSlicer" in orca._fake.notifications[0][1]
+        assert check.execute().status == FAIL
+        assert "Restart OrcaSlicer" in check.execute().message
+        check.on_lifecycle_event(EV.ObjectAdded, None)
+        tab.on_message({"type": "ready"})
+        assert tab.posted == [{"type": "error", "message": permissions.RESTART_NOTICE}]
+        assert insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice)).status == FAIL
+        assert state.report is None
+        # The next session: every capability has a stored config now.
+        nut_inserter._setup_pending = False
+        for cap in (check, tab, insert):
+            cap.on_load()
+        assert not nut_inserter._setup_pending and len(orca._fake.panels) == 1
+        assert check.execute().status == OK
+    finally:
+        nut_inserter._setup_pending = False

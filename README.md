@@ -10,7 +10,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 ## Status
 
 All seven milestones of the build brief are implemented and tested **at a desk**:
-85 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
+86 tests on synthetic meshes, synthetic G-code and a stand-in `orca` module.
 **The plugin itself has not run inside OrcaSlicer yet.** The probe has, and what it
 found is in [`docs/api-facts.md`](docs/api-facts.md).
 
@@ -38,7 +38,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.0-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.1-py3-none-any.whl`.
 
 ## Try it without Orca
 

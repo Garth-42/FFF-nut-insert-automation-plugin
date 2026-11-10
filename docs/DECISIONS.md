@@ -117,3 +117,10 @@ Each entry says what differs from the spec and why. Newest last.
     shows the permission request only after the module has loaded, and importing numpy
     before that would raise about 120 prompts. The permission code lives in the
     numpy-free `permissions.py`.
+34. **Install-session mode.** In the session the plugin is installed in, it raises one
+    "restart OrcaSlicer" notification and does nothing else: script, tab and slicing step
+    answer with that notice. The permission granted at install was not active until the
+    next start, so doing real work there raised about 120 prompts. The session is
+    recognised by an empty stored config; each capability then stores `{"activated": true}`.
+    For the slicing capability that marker is replaced by the real settings on the first
+    save, which also counts as non-empty.

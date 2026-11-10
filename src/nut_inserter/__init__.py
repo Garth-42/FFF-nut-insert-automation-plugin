@@ -28,8 +28,25 @@ MODEL_EVENTS = (EV.ObjectAdded, EV.ObjectDeleted, EV.ObjectTransformed,
                 EV.NewProject, EV.ProjectClosed)
 
 
+# True for the rest of the session in which the plugin was installed. The granted
+# permission is not active yet, so nothing that would import numpy may run.
+_setup_pending = False
+
+
+def _loaded(capability) -> bool:
+    """Called first in every on_load. False when this is the install session."""
+    global _setup_pending
+    if permissions.first_session(capability) and not _setup_pending:
+        _setup_pending = True
+        permissions.notify_restart()
+    return not _setup_pending
+
+
 def _call(name, *args):
     """Run state.<name>(*args) guarded. Importing state is what first imports numpy."""
+    if _setup_pending:
+        return orca.ExecutionResult.failure(orca.PluginResult.RecoverableError,
+                                            permissions.RESTART_NOTICE)
     try:
         from . import state
     except Exception as exc:  # noqa: BLE001  never crash the host
@@ -44,7 +61,8 @@ class CheckNuts(orca.script.ScriptPluginCapabilityBase):
         return "Check nuts"
 
     def on_load(self):
-        _call("open_panel", PANEL_HTML)
+        if _loaded(self):
+            _call("open_panel", PANEL_HTML)
 
     def execute(self):
         return _call("check_action")
@@ -61,7 +79,13 @@ class NutsTab(orca.pages.PagesPluginCapabilityBase):
     def get_ui(self):
         return PREVIEW_HTML
 
+    def on_load(self):
+        _loaded(self)
+
     def on_message(self, data):
+        if _setup_pending:
+            self.post_message({"type": "error", "message": permissions.RESTART_NOTICE})
+            return
         _call("on_tab_message", self, data)
 
 
@@ -74,7 +98,8 @@ class NutInsert(orca.slicing.SlicingPipelineCapabilityBase):
         return library.default_config()
 
     def on_load(self):
-        _call("set_config_owner", self)
+        if _loaded(self):
+            _call("set_config_owner", self)
 
     def execute(self, ctx):
         if ctx.step == orca.slicing.Step.posSlice:

@@ -18,13 +18,14 @@ the difference here and change only the `nut_inserter` package.
 - **What the plugin asks for.** Read access to every entry of `sys.path`: Orca's bundled
   Python library and its plugin package folder (`<data>/python/packages/cp312`, where
   numpy 2.5.4 is installed). See `nut_inserter/permissions.py`.
-- **One flood remained, in the session where the request was first granted.** There,
-  `volume.matrix()` with numpy not yet imported flooded again. In later sessions the same
-  step, and steps 1 to 8 in sequence, raised no prompts (reported by Garth). So the
-  likely explanation is that a grant takes effect from the next start of Orca. That is
-  an inference from three sessions, not something Orca documents. The manual test says to
-  restart Orca once after granting. The plugin also imports numpy itself, from a
-  capability method, before any host call that returns an array.
+- **The install session still floods.** Seen three times: probe 0.7.0 (step 4), and the
+  plugin wheel 0.2.0, whose `on_load` imported numpy right after activation. In every
+  later session the same code raised no prompts. So a grant appears to take effect from
+  the next start of Orca. That is an inference from these sessions, not something Orca
+  documents.
+- **What the plugin does about it (0.2.1).** In the session it is installed in, it only
+  raises a notification asking for a restart and imports nothing. It recognises that
+  session by its empty stored config (`permissions.first_session`).
 - **Nothing that imports numpy may run while Orca loads the plugin module.** The request
   is shown only after `register_capabilities()` returns. A test enforces this.
 
@@ -34,7 +35,7 @@ the difference here and change only the `nut_inserter` package.
 | --- | --- |
 | Page messages | The page receives objects and JSON strings alike. `on_message` gets a `dict`. `adapter.POST_AS_JSON_STRING = False` is right |
 | Threads | `get_ui`, `on_message` and lifecycle events run on `MainThread`. `on_load` and a script's `execute` run on a background thread (`Dummy-N`) |
-| UI-thread calls | `orca.host.app_info()` raises "must be called from the UI thread" from a script. `push_notification` from a script's thread returned without error (run 6). Panel `post` and `create_dock_panel` from a background thread are untested |
+| UI-thread calls | `orca.host.app_info()` raises "must be called from the UI thread" from a script. `push_notification`, `create_dock_panel` and panel `post` all worked from `on_load`'s background thread: the plugin's panel, report and error notification appeared (screenshot, 10 Nov 2026) |
 | Lifecycle context | `code`, `name`, `previous_name`, `index`, `id`, `dirty`, `source`, `msg`. `ObjectAdded` carried `name = 'Configuration 1.step'`, `index = -1` |
 | Settings | `get_config()` returns a JSON string, `"{}"` if never saved. `get_default_config()` is only what "Restore defaults" writes. The plugin applies its own defaults when the stored config is empty, which is the documented pattern |
 | Body names | The STEP body name survives import: volume 0 is `'NUT_M3SQ'`, volume 1 is `'SOLID'`. The object is named after the file |
@@ -65,8 +66,8 @@ the difference here and change only the `nut_inserter` package.
 | --- | --- | --- |
 | Part type is not readable | `is_modifier()`, `is_model_part()` work | Done: `adapter.part_type()`, finding `E_NOT_MODIFIER`, modifiers are no longer walls |
 | Threads, files and network raise prompts | So does every module import | Done: `request_permissions` at load, numpy imported only after it. Seen working in the probe |
-| Script `execute` runs on the UI thread | Background thread | Open: the check posts to pages and raises notifications from there |
-| "Create the dock panel in `on_load()`" | `on_load` runs on a background thread | Open: unverified whether `create_dock_panel` works there |
+| Script `execute` runs on the UI thread | Background thread. Posting to the panel and raising a notification from a background thread worked in `on_load`; from `execute` it is untested | None so far |
+| "Create the dock panel in `on_load()`" | `on_load` runs on a background thread, and creating the panel there works | None needed |
 | `get_default_config()` supplies the defaults | Only for "Restore defaults" | None needed |
 | Logs: `print()` goes to `log/python_*.log` | `print()` raises no prompt, but no such file was found, so where the text goes is unknown | Errors are also shown in the panel and tab |
 | At post-process `ctx.print` is `None`; the model must not be read from a slicing step | `ctx.print.model()` is meant for exactly that | Not used yet |
@@ -76,8 +77,7 @@ the difference here and change only the `nut_inserter` package.
 
 | Question | How it gets answered |
 | --- | --- |
-| Do `create_dock_panel` in `on_load` and panel `post` work from a background thread? | Manual check A with the wheel |
 | What do `ctx.print`, the layers and `ctx.config_value` give at slice time? | Probe: slice with it installed |
 | Does opening `ctx.gcode_path` raise a prompt? | Probe: export with it installed, or manual check D |
-| Does a grant need a restart to take effect? | Likely yes (see above). Manual check A: note whether the first session prompts |
+| Does a grant need a restart to take effect? | Apparently yes (see above) |
 | How do bed coordinates map to G-code coordinates on plates after the first? | Not probed yet |

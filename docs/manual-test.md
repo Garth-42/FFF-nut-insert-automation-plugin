@@ -29,17 +29,19 @@ uv build
   Result:
 
 - [ ] **A, Check nuts.** Remove the probe first, so only one plugin asks for permissions.
-  Install the wheel. Expect **one** permission request for read access to folders under
-  the OrcaSlicer app and its data folder; answer Yes, then restart OrcaSlicer once.
+  Install the wheel (0.2.1 or later). Expect **one** permission request for read access
+  to folders under the OrcaSlicer app and its data folder; answer Yes. Expect a
+  notification asking you to restart OrcaSlicer, and no other prompts. Restart.
   Open the project. Expect the Nut inserter panel docked on the right, no prompts, and a
   report listing the nut. With the nut body still a normal part, expect the error
   `E_NOT_MODIFIER`. Run Check nuts from the Plugins window and expect a result line with
   the nut count. Rotate the part 20 degrees about X and expect a warning notification.
 
-  If the panel is missing or stays empty, that is a finding: note it and say whether the
-  Nuts tab works.
-
-  Result:
+  Result so far (10 Nov 2026, wheel 0.2.0, install session): the panel docked, the check
+  ran from `on_load`, the nut was found as FLAT at X 164.706 Y 158.320 Z 1.900 with
+  `E_NOT_MODIFIER`, and the error notification appeared. The install session flooded
+  permission prompts, which 0.2.1 avoids. Still to do: the session after a restart, the
+  script action, and the rotation.
 
 - [ ] **B, Panel.** Narrow the flat pocket width range until the test part fails, save,
   and see the error state the measured width. Restart Orca and confirm the change was

@@ -55,9 +55,8 @@ class CapabilityBase:
         return {}
 
     def get_config(self):
-        if self._saved is not None:
-            return self._saved
-        return json.dumps(self.get_default_config())
+        # Like Orca: "{}" until something has been saved. The defaults are not applied.
+        return self._saved if self._saved is not None else "{}"
 
     def save_config(self, text):
         json.loads(text)
