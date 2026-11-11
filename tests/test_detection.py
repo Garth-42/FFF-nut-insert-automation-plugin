@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from builders import box, nut, pocket_block, snapshot, v_slot
+from builders import box, merge, nut, part, pocket_block, snapshot, v_slot
 from nutcore import library
 from nutcore.mesh import rotation, scaling, translation
 from nutcore.pipeline import detect
@@ -280,3 +280,40 @@ def test_nut_body_with_a_round_hole_and_many_facets():
     assert (n.cls, n.status, n.findings) == ("FLAT", "ok", [])
     assert n.placement == pytest.approx([112.4, 87.25, 5.3], abs=TOL)
     assert time.perf_counter() - start < 0.1
+
+
+@pytest.mark.parametrize("roofed", [True, False])
+def test_nut_on_edge_with_a_bolt_hole_through_both_slot_walls(roofed):
+    # Slot 2.1 x 5.8 x 6.0, floor at Z 0. A 3.4 mm square hole runs along X through both
+    # thread-face walls at the nut's centre height, as a real part has for the bolt.
+    hole, height, centre_z = 3.4, 6.0, 2.75
+    low, high = centre_z - hole / 2, centre_z + hole / 2
+    strip = (5.8 - hole) / 2
+    boxes = [box((8.1, 11.8, 3.0), (0, 0, -1.5))]
+    for sign in (1.0, -1.0):
+        x = sign * (1.05 + 1.5)
+        boxes.append(box((8.1, 3.0, height), (0, sign * 4.4, height / 2)))
+        boxes.append(box((3.0, 5.8, low), (x, 0, low / 2)))
+        boxes.append(box((3.0, 5.8, height - high), (x, 0, (high + height) / 2)))
+        for side in (1.0, -1.0):
+            boxes.append(box((3.0, strip, hole), (x, side * (hole + strip) / 2, centre_z)))
+    if roofed:
+        boxes.append(box((8.1, 11.8, 1.0), (0, 0, height + 0.5)))
+    host = part("Bracket", merge(boxes))
+    (n,) = run([host, nut(centre=(0, 0, centre_z), rot=rotation("y", 90))]).nuts
+    assert (n.cls, n.status, n.findings) == ("EDGE", "ok", [])
+    assert n.pocket["thickness"] == pytest.approx(2.1, abs=TOL)
+    assert n.pocket["depth"] == pytest.approx(height, abs=TOL)
+    top = FLOOR + height
+    assert (n.roof_z, n.rim_z) == ((pytest.approx(top, abs=TOL), None) if roofed
+                                   else (None, pytest.approx(top, abs=TOL)))
+
+
+def test_flat_nut_with_a_bolt_hole_through_floor_and_roof():
+    # The roof is four slabs around a 3.4 mm square hole, in line with the hole in the floor.
+    side = (11.8 - 3.4) / 2
+    roof = [box((11.8, side, 1.0), (0, s * (1.7 + side / 2), 2.5)) for s in (1, -1)]
+    roof += [box((side, 3.4, 1.0), (s * (1.7 + side / 2), 0, 2.5)) for s in (1, -1)]
+    (n,) = flat_case(roof=None, bolt_hole=3.4, extra=roof).nuts
+    assert n.status == "ok" and n.findings == []
+    assert n.roof_z == pytest.approx(FLOOR + 2.0, abs=TOL)
