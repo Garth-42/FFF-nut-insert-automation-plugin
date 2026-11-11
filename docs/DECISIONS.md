@@ -138,3 +138,11 @@ Each entry says what differs from the spec and why. Newest last.
     one `state` module, and with it the cached report, is shared by every load.
 38. **`on_unload` closes the panel and forgets the tab, and `broadcast` skips pages that
     no longer answer.** A second load would otherwise leave two panels and stale tabs.
+39. **The rim walk casts five rays per side, not one.** The spec's single ray from the
+    nut's centre line looks straight down the bolt hole of a nut on edge, so an open-top
+    slot with a bolt hole was measured as having no walls (rim at the nut's centre, false
+    `E_DEPTH`). Each side now casts a row of rays spread across the nut and sees its wall
+    when a quarter of them hit, the same rule as for the walls. Bolt holes are otherwise
+    handled by the existing agreement rules: walls and the seat need 25 % of a face's
+    rays, the roof 50 %. On the 5 x 5 grid that holds for a round hole up to 0.8 of the
+    width across flats; a wider hole through the roof reports `E_DROP_PATH`.
