@@ -1,4 +1,6 @@
-"""The docked panel: check summary, Modifier reminder, nut library editor and settings.
+"""The docked panel: check summary, Modifier reminder, and three settings tabs: Nuts (the
+nut library and the shared settings), Heat-set (how inserts are put in) and Machine settings
+(the heat-set tool's measured values and motion).
 
 One self-contained HTML page kept as a Python string: inline CSS and JavaScript,
 no external files. It talks to Python through window.orca (see state._handle).
@@ -52,8 +54,17 @@ PANEL_HTML = r"""<!doctype html>
                 padding: 2px 0; }
   .form .group { font-weight: 600; margin-top: 10px; }
   .form .unit { color: var(--muted); }
+  .form label > .row > .unit:last-child { display: inline-block; min-width: 3.2em; }
   .muted { color: var(--muted); }
   details { margin: 6px 0; } summary { cursor: pointer; }
+  .tabs { display: flex; gap: 2px; margin: 18px 0 4px; border-bottom: 1px solid var(--border); }
+  .tabs button { border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0;
+                 margin-bottom: -1px; }
+  .tabs button.selected { border-color: var(--border); background: var(--bg); font-weight: 600; }
+  .badge { font-size: 11px; padding: 0 5px; margin-left: 6px; border-radius: 8px;
+           border: 1px solid var(--warn); color: var(--warn); cursor: pointer; }
+  .problems { margin: 6px 0; color: var(--err); }
+  .derived td:first-child { color: var(--muted); }
   .hidden { display: none; }
 </style>
 </head>
@@ -69,6 +80,13 @@ PANEL_HTML = r"""<!doctype html>
 <div id="modifier" class="banner info hidden"></div>
 <div id="nuts"></div>
 
+<div class="tabs" id="tabs">
+  <button data-tab="nuts" class="selected">Nuts</button>
+  <button data-tab="heatset">Heat-set</button>
+  <button data-tab="machine">Machine settings</button>
+</div>
+
+<section id="tab-nuts">
 <h2>Nut library</h2>
 <p class="muted">Every pocket, slot, span and reach number is a placeholder until you replace it
 with values from your own test prints.</p>
@@ -91,6 +109,30 @@ same position, undoing any retraction the macro adds itself, with the positionin
 modes unchanged.</p>
 <p>Placeholders: {index} {key} {cls} {x} {y} {z} {z_low} {z_high} {yaw} {feeder} {layer_z}
 {tool} {rx} {ry} {rz}. Write a literal brace as {{ or }}.</p></details>
+</section>
+
+<section id="tab-heatset" class="hidden">
+<h2>Heat-set tool</h2>
+<div class="row picker"></div>
+<div class="banner stale hidden tbd"></div>
+<div class="problems"></div>
+<p class="muted">Bodies named HEATSET_&lt;key&gt; are inserts for the profile with that key. The
+angle window, body tolerance and what happens on an error are the shared settings on the Nuts
+tab.</p>
+<div class="form" id="heatset-form"></div>
+<h2>Derived, never typed</h2>
+<table class="derived" id="derived"></table>
+</section>
+
+<section id="tab-machine" class="hidden">
+<h2>Heat-set tool hardware</h2>
+<div class="row picker"></div>
+<div class="banner stale hidden tbd"></div>
+<div class="problems"></div>
+<p class="muted">Values marked TBD are placeholders until measured on the tool. Entering a value
+marks it measured; click TBD to keep the placeholder as measured.</p>
+<div class="form" id="machine-form"></div>
+</section>
 
 <div class="row" style="margin-top:10px">
   <button class="primary" id="save">Save</button>
@@ -149,6 +191,89 @@ Import, then Save.</p>
     ['templates.reprapfirmware', 'RepRapFirmware insert line', 'area'],
     ['templates.marlin', 'Marlin insert lines (your own)', 'area']
   ];
+  // Heat-set profile fields: [name, label, kind, unit or options]. docs/HEATSET_GCODE_SPEC.md.
+  var HEATSET_FIELDS = [
+    [null, 'Mode'],
+    ['mode', 'Mode', 'select', [['normal', 'Normal'],
+      ['rehearse', 'Rehearse: no heat, no contact, every move raised']]],
+    ['rehearse_lift', 'Rehearse lift', 'num', 'mm'],
+    [null, 'When'],
+    ['timing', 'Insert', 'select', [['after_layer', 'After the layer that prints the hole rim'],
+      ['end_of_print', 'At the end of the print']]],
+    ['preheat_lead', 'Preheat this long before a block', 'num', 's'],
+    ['preheat_layers', 'Or this many layers, without time estimates', 'int', 'layers'],
+    [null, 'Temperature'],
+    ['insert_temp', 'Insert temperature (blank: automatic)', 'temp', '°C'],
+    ['insert_temp_offset', 'Automatic: print temperature plus', 'num', '°C'],
+    ['filament_temps', 'Filament table, when the G-code has none', 'table', '°C'],
+    ['temp_window', 'Allowed difference before a push', 'num', '°C'],
+    [null, 'Process'],
+    ['proud_after_hot', 'Proud after the hot push (g)', 'num', 'mm'],
+    ['mouth_gap', 'Mouth above the surface in the push (h)', 'num', 'mm'],
+    ['follower_retract', 'Follower back-off after each insert (r)', 'num', 'mm'],
+    ['resist_wait', 'Wait when the insert resists', 'num', 's'],
+    ['resist_retries', 'Waits before aborting', 'int', ''],
+    ['press_dwell', 'Hold after the press', 'num', 's'],
+    ['flush_tol', 'Flush tolerance', 'num', 'mm'],
+    ['press_guard', 'Overpress guard', 'num', 'mm'],
+    ['surface_tol', 'Probed surface against the model', 'num', 'mm'],
+    ['on_proud', 'When an insert stays proud', 'select', [['warn', 'Warn and carry on'],
+      ['pause', 'Pause the print']]],
+    [null, 'Hole checks'],
+    ['hole_d_min', 'Hole diameter, minimum', 'num', 'mm'],
+    ['hole_d_max', 'Hole diameter, maximum', 'num', 'mm'],
+    ['hole_extra_depth', 'Blind hole deeper than the insert by', 'num', 'mm'],
+    ['min_wall', 'Wall around the hole, minimum', 'num', 'mm'],
+    [null, 'Hold-down warning'],
+    ['min_contact_area', 'Part on the bed, minimum area', 'num', 'mm²'],
+    ['max_height_ratio', 'Height ÷ √area, maximum', 'num', '']
+  ];
+  var MACHINE_FIELDS = [
+    [null, 'Tool'],
+    ['name', 'Profile name', 'text'],
+    ['tool', 'Tool number', 'int', 'T'],
+    ['firmware', 'Firmware', 'select', [['reprapfirmware', 'RepRapFirmware'],
+      ['klipper', 'Klipper (not built yet)']]],
+    ['magazine_capacity', 'Magazine capacity', 'int', 'inserts'],
+    [null, 'Insert'],
+    ['insert_key', 'Key (bodies named HEATSET_<key>)', 'text'],
+    ['insert_length', 'Insert length (Li)', 'num', 'mm'],
+    ['insert_od', 'Insert diameter across the knurls', 'num', 'mm'],
+    ['rest_recess', 'Rest recess above the mouth (e)', 'num', 'mm'],
+    [null, 'Measured on the tool'],
+    ['pad_dx', 'Pad offset X, pad minus mouth', 'num', 'mm'],
+    ['pad_dy', 'Pad offset Y, pad minus mouth', 'num', 'mm'],
+    ['pad_drop', 'Pad face below the mouth (p)', 'num', 'mm'],
+    ['pad_d', 'Pad face diameter', 'num', 'mm'],
+    ['tube_od', 'Tube tip diameter', 'num', 'mm'],
+    ['block_r', 'Heater block radius around the mouth', 'num', 'mm'],
+    ['block_clearance', 'Heater block underside above the mouth', 'num', 'mm'],
+    ['trip_overtravel', 'Trip overtravel (δ)', 'num', 'mm'],
+    ['float_travel', 'Float lift left after the trip', 'num', 'mm'],
+    ['trip_force', 'Trip force', 'num', 'g'],
+    [null, 'Motion'],
+    ['push_step', 'Push step between float checks', 'num', 'mm'],
+    ['push_speed', 'Push speed', 'num', 'mm/s'],
+    ['unsheath_speed', 'Unsheath speed', 'num', 'mm/s'],
+    ['retract_speed', 'Follower back-off speed', 'num', 'mm/s'],
+    ['probe_start', 'Probing starts above the surface', 'num', 'mm'],
+    ['probe_speed', 'Probe speed', 'num', 'mm/s'],
+    ['press_speed', 'Press speed', 'num', 'mm/s'],
+    ['travel_lift', 'Lift before the pad moves over', 'num', 'mm'],
+    ['local_clear', 'Mouth clearance near a hole', 'num', 'mm'],
+    ['safe_z_clear', 'Clearance over the print between inserts', 'num', 'mm'],
+    ['xy_travel_speed', 'XY speed between inserts', 'num', 'mm/s'],
+    ['xy_local_speed', 'XY speed near a hole', 'num', 'mm/s'],
+    ['z_travel_speed', 'Z speed between inserts', 'num', 'mm/s'],
+    ['z_local_speed', 'Z speed near a hole', 'num', 'mm/s']
+  ];
+  var DERIVED = [['L', 'Unsheath lift and follower feed (L = g − h)', 'mm'],
+    ['push', 'Follower travel in the hot push (h + e + Li − g)', 'mm'],
+    ['ticks', 'Float checks in the push, at most', ''],
+    ['pad_face_in_push', 'Pad face above the surface in the push (h − p)', 'mm'],
+    ['mouth_in_press', 'Mouth above the surface in the press (p)', 'mm']];
+  var profileIndex = 0;   // the heat-set profile being edited
+  var lastTemp = null;    // {value, source} from the last export
 
   function get(obj, path) {
     return path.split('.').reduce(function (o, k) { return o == null ? o : o[k]; }, obj);
@@ -171,36 +296,79 @@ Import, then Save.</p>
     return input;
   }
 
-  // Build a form for `target` from a field list.
+  // Build a form for `target` from a field list. A target with a "tbd" list (a heat-set
+  // profile) shows a TBD badge on each placeholder; entering a value takes it off the list.
   function buildForm(host, fields, target, afterChange) {
     host.textContent = '';
+    var tbd = Array.isArray(target.tbd) ? target.tbd : null;
     fields.forEach(function (field) {
-      var path = field[0], kind = field[2];
+      var path = field[0], kind = field[2], extra = field[3];
       if (path === null) { host.appendChild(el('div', {class: 'group'}, field[1])); return; }
       var row = el('label');
-      row.appendChild(el('span', {}, field[1]));
-      var value = get(target, path), control;
-      var changed = function (v) { set(target, path, v); dirty(); if (afterChange) { afterChange(); } };
+      var name = el('span', {}, field[1]);
+      row.appendChild(name);
+      var value = get(target, path), control, badge = null;
+      var measured = function () {
+        var at = tbd ? tbd.indexOf(path) : -1;
+        if (at >= 0) { tbd.splice(at, 1); }
+        if (badge) { badge.remove(); badge = null; }
+      };
+      var changed = function (v) {
+        set(target, path, v); measured(); dirty();
+        if (afterChange) { afterChange(path); }
+      };
+      var unit = typeof extra === 'string' ? extra :
+        (kind === 'num' && path.indexOf('deg') < 0 ? 'mm' : '');
       if (kind === 'range') {
         control = el('span', {class: 'row'});
         control.appendChild(numberInput(value[0], function (v) { value[0] = v; dirty(); }));
         control.appendChild(el('span', {class: 'unit'}, 'to'));
         control.appendChild(numberInput(value[1], function (v) { value[1] = v; dirty(); }));
         control.appendChild(el('span', {class: 'unit'}, 'mm'));
-      } else if (kind === 'num' || kind === 'int') {
+      } else if (kind === 'num' || kind === 'int' || kind === 'temp') {
         control = el('span', {class: 'row'});
-        control.appendChild(numberInput(value, function (v) {
-          changed(kind === 'int' ? Math.round(v) : v); }));
-        if (kind === 'num' && path.indexOf('deg') < 0) {
-          control.appendChild(el('span', {class: 'unit'}, 'mm'));
+        var input = el('input', {type: 'number', step: 'any'});
+        input.value = value == null ? '' : value;
+        input.addEventListener('change', function () {
+          if (kind === 'temp' && input.value.trim() === '') { changed(null); return; }
+          var v = parseFloat(input.value);
+          changed(kind === 'int' ? Math.round(v) : v);
+        });
+        if (kind === 'temp') { input.placeholder = 'auto'; }
+        control.appendChild(input);
+        if (unit || tbd) { control.appendChild(el('span', {class: 'unit'}, unit)); }
+        if (kind === 'temp') {
+          row = el('div');
+          var line = el('label');
+          line.appendChild(name);
+          line.appendChild(control);
+          row.appendChild(line);
+          row.appendChild(el('div', {class: 'muted', id: 'auto-temp'}));
+          host.appendChild(row);
+          return;
         }
+      } else if (kind === 'table') {
+        control = el('span', {class: 'row'});
+        var text = el('input', {type: 'text', size: 24});
+        text.value = Object.keys(value || {}).map(function (k) { return k + ' ' + value[k]; })
+          .join(', ');
+        text.addEventListener('change', function () {
+          var table = {};
+          text.value.split(',').forEach(function (part) {
+            var words = part.trim().split(/\s+/);
+            if (words.length === 2 && words[0]) { table[words[0]] = parseFloat(words[1]); }
+          });
+          changed(table);
+        });
+        control.appendChild(text);
+        control.appendChild(el('span', {class: 'unit'}, unit));
       } else if (kind === 'bool') {
         control = el('input', {type: 'checkbox'});
         control.checked = !!value;
         control.addEventListener('change', function () { changed(control.checked); });
       } else if (kind === 'select') {
         control = el('select');
-        field[3].forEach(function (option) {
+        (extra || field[3]).forEach(function (option) {
           control.appendChild(el('option', {value: option[0]}, option[1]));
         });
         control.value = value;
@@ -215,6 +383,15 @@ Import, then Save.</p>
         control = el('input', {type: 'text'});
         control.value = value == null ? '' : value;
         control.addEventListener('change', function () { changed(control.value); });
+      }
+      if (tbd && tbd.indexOf(path) >= 0) {
+        badge = el('span', {class: 'badge', title: 'A placeholder, not measured yet. ' +
+          'Enter the measured value, or click to keep this one as measured.'}, 'TBD');
+        badge.addEventListener('click', function (ev) {
+          ev.preventDefault(); measured(); dirty();
+          if (afterChange) { afterChange(path); }
+        });
+        name.appendChild(badge);
       }
       row.appendChild(control);
       host.appendChild(row);
@@ -251,6 +428,120 @@ Import, then Save.</p>
       $('form').textContent = '';
     }
     buildForm($('settings'), SETTING_FIELDS, config.settings);
+    renderProfiles();
+  }
+
+  // --- Heat-set profiles: the Heat-set and Machine settings tabs ---------------------------
+  function currentProfile() {
+    var list = config && config.heatset && config.heatset.profiles;
+    if (!list || !list.length) { return null; }
+    if (profileIndex >= list.length) { profileIndex = list.length - 1; }
+    return list[profileIndex];
+  }
+
+  function renderPicker(host) {
+    host.textContent = '';
+    var list = config.heatset.profiles;
+    var select = el('select');
+    list.forEach(function (p, i) {
+      select.appendChild(el('option', {value: String(i)}, p.name + ', HEATSET_' + p.insert_key));
+    });
+    select.value = String(profileIndex);
+    select.addEventListener('change', function () {
+      profileIndex = parseInt(select.value, 10); renderProfiles();
+    });
+    var copy = el('button', {}, 'Duplicate'), remove = el('button', {}, 'Delete');
+    remove.disabled = list.length < 2;
+    copy.addEventListener('click', function () {
+      var p = JSON.parse(JSON.stringify(list[profileIndex]));
+      p.name = p.name + ' copy'; p.insert_key = p.insert_key + '_COPY';
+      list.push(p); profileIndex = list.length - 1; dirty(); renderProfiles();
+    });
+    remove.addEventListener('click', function () {
+      if (list.length < 2) { return; }
+      list.splice(profileIndex, 1); dirty(); renderProfiles();
+    });
+    host.appendChild(el('span', {class: 'muted'}, 'Profile'));
+    host.appendChild(select); host.appendChild(copy); host.appendChild(remove);
+  }
+
+  function renderTbd() {
+    var p = currentProfile();
+    var open = !!(p && p.tbd && p.tbd.length && p.mode !== 'rehearse');
+    document.querySelectorAll('.tbd').forEach(function (box) {
+      box.classList.toggle('hidden', !open);
+      box.textContent = open ? 'Not measured yet: ' + p.tbd.join(', ') + '. In normal mode ' +
+        'inserts are refused until these are entered (rule 5). Rehearse mode runs without them.' : '';
+    });
+  }
+
+  function renderTemp() {
+    var host = $('auto-temp'), p = currentProfile();
+    if (!host || !p) { return; }
+    var text = (p.insert_temp == null ? 'Automatic: ' : 'Automatic would be: ') +
+      'the print temperature in the G-code + ' + p.insert_temp_offset + ' °C, or the filament ' +
+      'table when the G-code sets none.';
+    if (lastTemp) {
+      text += ' Last export: ' + lastTemp.value + ' °C (' + lastTemp.source + ').';
+    }
+    host.textContent = text;
+  }
+
+  function renderDerived(values) {
+    var table = $('derived');
+    table.textContent = '';
+    if (!values) {
+      var tr = el('tr');
+      tr.appendChild(el('td', {}, 'Shown once the profile breaks no rule.'));
+      table.appendChild(tr);
+      return;
+    }
+    DERIVED.forEach(function (d) {
+      var row = el('tr'), v = values[d[0]];
+      row.appendChild(el('td', {}, d[1]));
+      row.appendChild(el('td', {}, (d[2] ? (+v).toFixed(3) + ' ' + d[2] : String(v))));
+      table.appendChild(row);
+    });
+  }
+
+  function checkProfile() {
+    var p = currentProfile();
+    if (p) { send({type: 'check_profile', profile: p}); }
+  }
+
+  function profileChanged(path) {
+    if (path === 'name' || path === 'insert_key') {
+      document.querySelectorAll('.picker').forEach(renderPicker);
+    }
+    renderTbd();
+    renderTemp();
+    checkProfile();
+  }
+
+  function renderProfiles() {
+    var p = currentProfile();
+    document.querySelectorAll('.picker').forEach(function (host) {
+      if (p) { renderPicker(host); } else {
+        host.textContent = 'No heat-set profile. Save to add the default one.';
+      }
+    });
+    if (!p) {
+      $('heatset-form').textContent = ''; $('machine-form').textContent = '';
+      renderDerived(null); renderTbd();
+      return;
+    }
+    buildForm($('heatset-form'), HEATSET_FIELDS, p, profileChanged);
+    buildForm($('machine-form'), MACHINE_FIELDS, p, profileChanged);
+    renderTemp(); renderTbd(); checkProfile();
+  }
+
+  function showTab(name) {
+    Array.prototype.forEach.call($('tabs').children, function (button) {
+      button.classList.toggle('selected', button.getAttribute('data-tab') === name);
+    });
+    ['nuts', 'heatset', 'machine'].forEach(function (tab) {
+      $('tab-' + tab).classList.toggle('hidden', tab !== name);
+    });
   }
 
   function renderReport(report) {
@@ -258,7 +549,9 @@ Import, then Save.</p>
     var chips = $('chips'), list = $('nuts'), modifier = $('modifier');
     chips.textContent = ''; list.textContent = '';
     if (!report) { $('status').textContent = 'No check has run yet.'; return; }
-    $('status').textContent = report.nuts.length + ' nut(s) found';
+    var inserts = report.nuts.filter(function (n) { return n.kind === 'heatset'; }).length;
+    $('status').textContent = (report.nuts.length - inserts) + ' nut(s)' +
+      (inserts ? ', ' + inserts + ' heat-set insert(s)' : '') + ' found';
     ['ok', 'warning', 'error'].forEach(function (k) {
       chips.appendChild(el('span', {class: 'chip ' + k}, report.summary[k] + ' ' + k));
     });
@@ -266,24 +559,35 @@ Import, then Save.</p>
     if (report.nuts.length) {
       var names = [];
       report.nuts.forEach(function (n) { if (names.indexOf(n.name) < 0) { names.push(n.name); } });
-      modifier.textContent = 'One manual step: set every nut body to Modifier. Select ' +
-        names.join(', ') + ' in the object list, right-click, Change type, Modifier. ' +
-        'A nut body left as a normal part prints as plastic and fills its own pocket. ' +
-        'Export is refused if that happens.';
+      modifier.textContent = 'One manual step: set every nut and insert body to Modifier. ' +
+        'Select ' + names.join(', ') + ' in the object list, right-click, Change type, ' +
+        'Modifier. A body left as a normal part prints as plastic and fills its own pocket ' +
+        'or hole. Export is refused if that happens.';
     }
+    var shown = {};         // profile problem -> the first insert it was written out for
     report.nuts.forEach(function (n) {
       var box = el('div', {class: 'nut'});
       var head = el('div', {class: 'head'});
       head.appendChild(el('span', {class: 'icon ' + n.status}, ICON[n.status]));
+      var top = n.kind === 'heatset';      // an insert's height is its top, flush with the rim
       var where = n.placement ? '  X ' + n.placement[0].toFixed(3) + '  Y ' +
-        n.placement[1].toFixed(3) + '  Z ' + n.placement[2].toFixed(3) : '';
+        n.placement[1].toFixed(3) + (top ? '  top Z ' + n.z_high.toFixed(3) :
+        '  Z ' + n.placement[2].toFixed(3)) : '';
       head.appendChild(el('span', {}, '#' + n.index + ' ' + n.name + (n.cls ? ' · ' + n.cls : '')));
       box.appendChild(head);
       if (where) { box.appendChild(el('div', {class: 'finding'}, where)); }
       n.findings.forEach(function (f) {
         var line = el('div', {class: 'finding'});
         line.appendChild(el('b', {}, f.level + ': '));
-        line.appendChild(document.createTextNode(f.message));
+        var prefix = n.name + ' #' + n.index + ': ', text = f.message;
+        var shared = f.code === 'E_PROFILE' && text.indexOf(prefix) === 0 ?
+          text.slice(prefix.length) : null;
+        if (shared !== null && shown[shared]) {
+          text = 'the heat-set profile problem given for #' + shown[shared] + ' above.';
+        } else if (shared !== null) {
+          shown[shared] = n.index;
+        }
+        line.appendChild(document.createTextNode(text));
         box.appendChild(line);
       });
       list.appendChild(box);
@@ -317,10 +621,23 @@ Import, then Save.</p>
       $('log').scrollTop = $('log').scrollHeight;
     } else if (m.type === 'stale') {
       $('stale').classList.remove('hidden');
+    } else if (m.type === 'profile_check') {
+      document.querySelectorAll('.problems').forEach(function (box) {
+        box.textContent = '';
+        (m.problems || []).forEach(function (text) { box.appendChild(el('div', {}, text)); });
+      });
+      renderDerived(m.derived);
+    } else if (m.type === 'insert_temp') {
+      lastTemp = {value: m.value, source: m.source};
+      renderTemp();
     } else if (m.type === 'error') {
       showError(m.message);
     }
   }
+
+  Array.prototype.forEach.call($('tabs').children, function (button) {
+    button.addEventListener('click', function () { showTab(button.getAttribute('data-tab')); });
+  });
 
   $('check').addEventListener('click', function () { send({type: 'check'}); });
   $('log-refresh').addEventListener('click', function () { send({type: 'get_log'}); });

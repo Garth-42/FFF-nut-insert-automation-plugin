@@ -281,3 +281,48 @@ Each entry says what differs from the spec and why. Newest last.
       plugin can number inserts after the nuts (milestone 6).
     - **ASCII comments.** `emit.ascii_text` turns °, ², ÷, √, × and long dashes into plain
       text for G-code comments, since finding messages use them (`; HEATSET skipped`).
+
+## Heat-set inserts, milestone 6 (24 Nov 2026, wheel 0.3.0)
+
+47. **How the plugin runs heat-set inserts.**
+    - **One check, one report.** `state.run_check` runs the nut detection, then
+      `heatsetcore.detect.detect_inserts` on the same snapshot; inserts are numbered after
+      the nuts. The panel, the Nuts tab, the gate and the notifications read both kinds.
+    - **Rule 5 at check time.** A profile in normal mode with values still on its `tbd`
+      list gives every insert of that profile `E_PROFILE`, so the panel says what to
+      measure before anyone slices. The gate shows a profile problem once, without the
+      insert labels, however many inserts share it. Rehearse mode clears it.
+    - **One heat-set tool per print.** The G-code gets one header for one tool, so
+      `detect_inserts` refuses inserts of a second profile (`E_PROFILE`), and the export
+      step refuses them again rather than trust the report. The spec does not cover two
+      heat-set tools.
+    - **The export step.** Nut blocks first (`nutcore.gcode.inject`, which now skips
+      heat-set records), then `heatsetcore.export` on its output. If either refuses, the
+      file stays as Orca wrote it. When both find their own markers (Orca running the step
+      twice), the result is "skipped" and the file is untouched.
+    - **Inserts the checks refused** go to `place` as `refused`, so `on_error` treats them
+      like inserts the G-code fails: `block` refuses the export, `skip` names them in a
+      `; HEATSET skipped` comment and the pop-up lists them. Comments drop the label from the
+      message, since the comment already names the insert.
+    - **Tilted and inverted inserts** are not errors: each gets a `; HEATSET by hand`
+      comment, and no pop-up.
+    - **Filament type** comes from `ctx.config_value("filament_type")`, the first
+      extruder's entry. The key name is unverified, like the others; without it the
+      filament table is skipped and an insert with no print temperature is refused.
+    - **Object names** come from the G-code's own labels at export, as placement already
+      reads them, so the snapshot does not carry object names. The plan's architecture
+      sketch expected them in the snapshot.
+    - **The panel.** Three tabs: Nuts (the nut library and the shared settings), Heat-set
+      (the spec's Process and Behaviour groups without the tool's hardware), and Machine
+      settings (Measured and Motion, the tool number, firmware and magazine capacity), with
+      one profile picker. A TBD badge marks each placeholder; entering a value, or clicking
+      the badge, takes it off the list. The rule messages and derived values come from
+      Python through a `check_profile` page message, so the math stays in `routine.py`.
+      The tab shown is not remembered: `localStorage` would make the page write files
+      (CLAUDE.md rule 5).
+    - **The insert temperature used** by the last export is kept in `state` and sent to a
+      page when it says "ready". The export runs on the slicing thread, which never posts to
+      a page.
+    - **The Nuts tab** draws each insert's two tool footprints at its top: mouth over the
+      hole for the hot push, solid; pad over the hole for the press, dashed. These are the
+      circles rule 8 checks.

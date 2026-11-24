@@ -1,5 +1,6 @@
 """Heat-set detection: cases H1 to H20 from docs/heatset-plan.md, "Tests", with the default
-M3x5.7 profile (Ø4.6 x 5.7 insert, hole Ø3.9-4.2 and 6.7 deep, wall 1.6, pad Ø10)."""
+M3x5.7 profile (Ø4.6 x 5.7 insert, hole Ø3.9-4.2 and 6.7 deep, wall 1.6, pad Ø10), its TBDs
+marked measured unless a test says otherwise."""
 
 import time
 from dataclasses import replace
@@ -15,7 +16,15 @@ from nutcore.mesh import apply_matrix, rotation, scaling, translation
 from nutcore.rays import cast, cast_fan
 from nutcore.report import Report
 
-LIB = library.parse(library.default_config())
+
+def measured(**change) -> library.Library:
+    """The default settings with the heat-set profile's TBDs measured (placeholders kept)."""
+    config = library.default_config()
+    config["heatset"]["profiles"][0].update({"tbd": [], **change})
+    return library.parse(config)
+
+
+LIB = measured()
 BED = translation((100.0, 80.0, 0.0))
 TOP = 10.0                              # hole_block's top face
 FLUSH = (0.0, 0.0, TOP - 5.7 / 2)       # body middle for an insert flush with the top
@@ -31,8 +40,8 @@ def message(record, code):
     return next(f.message for f in record.findings if f.code == code)
 
 
-def run(parts, matrices=None):
-    return detect_inserts(snapshot(parts, matrices or [BED]), LIB)
+def run(parts, matrices=None, lib=LIB):
+    return detect_inserts(snapshot(parts, matrices or [BED]), lib)
 
 
 def one(parts, matrices=None):
@@ -220,6 +229,37 @@ def test_hole_closed_at_both_ends():
     r = blind(lid_gap=0.0)
     assert (r.status, codes(r)) == ("error", ["E_DROP_PATH"])
     assert "closed at both ends" in message(r, "E_DROP_PATH")
+
+
+def test_unmeasured_profile_refuses_every_insert_in_normal_mode():
+    """Rule 5: the default profile still lists its TBDs."""
+    fresh = library.parse(library.default_config())
+    records = run([hole_block(), insert_body(centre=FLUSH)], [BED, translation((140, 80, 0))],
+                  lib=fresh)
+    assert [codes(r) for r in records] == [["E_PROFILE"], ["E_PROFILE"]]
+    text = message(records[0], "E_PROFILE")
+    assert "rule 5" in text and "magazine_capacity" in text and "rehearse mode" in text
+    assert records[0].placement is not None               # the hole is still measured
+    rehearse = run([hole_block(), insert_body(centre=FLUSH)], lib=measured(
+        tbd=["pad_dx"], mode="rehearse"))
+    assert codes(rehearse[0]) == []
+
+
+def test_one_heat_set_tool_per_print():
+    config = library.default_config()
+    first = config["heatset"]["profiles"][0]
+    first["tbd"] = []
+    config["heatset"]["profiles"].append({**first, "name": "M4 tool", "insert_key": "M4x8",
+                                          "insert_od": 5.6, "insert_length": 8.0,
+                                          "hole_d_min": 5.6, "hole_d_max": 6.0})
+    right = translation((20.0, 0.0, 0.0))
+    m4_body = insert_body(od=5.6, length=8.0, centre=(0, 0, TOP - 4.0), name="HEATSET_M4x8")
+    m3, m4 = run([hole_block(), insert_body(centre=FLUSH),
+                  replace(hole_block(hole=5.8, depth=9.0), matrix=right),
+                  replace(m4_body, matrix=right)], lib=library.parse(config))
+    assert (m3.key, codes(m3)) == ("M3x5.7", [])
+    assert (m4.key, codes(m4)) == ("M4x8", ["E_PROFILE"])
+    assert "already has HEATSET_M3x5.7 inserts" in message(m4, "E_PROFILE")
 
 
 def test_numbering_follows_the_nuts_and_nuts_are_not_hosts():

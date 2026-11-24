@@ -244,6 +244,11 @@ def snapshot(parts, instance_matrices=None):
     return make_snapshot([ObjectSnapshot(parts=tuple(parts), instances=instances)])
 
 
+def scene(*objects):
+    """Several objects in one ModelSnapshot: each a (parts, instance matrices) pair."""
+    return make_snapshot([snapshot(parts, matrices).objects[0] for parts, matrices in objects])
+
+
 # --- Synthetic G-code -----------------------------------------------------------------------
 
 def gcode_ring(centre=(112.4, 87.25), inner=(5.8, 5.8), floor_z=4.4, roof_z=6.4, top_z=7.4,

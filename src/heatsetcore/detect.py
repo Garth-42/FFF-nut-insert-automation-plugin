@@ -16,7 +16,7 @@ from nutcore.library import Library
 from nutcore.mesh import ModelSnapshot, bed_mesh, normals_and_areas
 from nutcore.report import NutRecord, status_of
 
-from . import checks
+from . import checks, profile
 from .hole import INVERTED, UPRIGHT, _plane, measure_hole
 from .insert import BodySizeError, insert_frame
 
@@ -51,7 +51,19 @@ def detect_inserts(snapshot: ModelSnapshot, lib: Library, first_index: int = 1) 
                                "Modifier.")
                 record.status = status_of(record.findings)
                 records.append(record)
+    _one_tool(records)
     return records
+
+
+def _one_tool(records: list) -> None:
+    """One heat-set profile per print: the G-code gets one header, for one tool. The
+    first known key wins; inserts of any other profile are refused."""
+    used = next((r.key for r in records if r.key), None)
+    for r in records:
+        if r.key and r.key != used:
+            r.add("E_PROFILE", f"{r.label}: this print already has HEATSET_{used} inserts, and "
+                  "the G-code takes one heat-set tool per print. Use one insert size, or "
+                  "print these parts separately.")
 
 
 def footprint(host: np.ndarray) -> tuple[float, float]:
@@ -83,6 +95,9 @@ def _detect(record: NutRecord, mesh, host, lib: Library, keys, hold) -> None:
                    f"names: {known}. Rename the body or add the tool's profile in the Nut panel.")
         return
     record.key = prof["insert_key"]
+    unmeasured = profile.tbd_problem(prof)              # rule 5, normal mode only
+    if unmeasured:
+        record.add("E_PROFILE", f"{label}: {unmeasured}.")
     try:
         frame = insert_frame(mesh.vertices, mesh.triangles, prof["insert_length"],
                              prof["insert_od"], settings.body_tolerance_mm)

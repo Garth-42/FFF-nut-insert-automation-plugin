@@ -10,6 +10,12 @@ import threading
 import time
 import traceback
 
+import nutcore
+from heatsetcore import export as heatset_export
+from heatsetcore import place as heatset_place
+from heatsetcore import profile as heatset_profile
+from heatsetcore import routine as heatset_routine
+from heatsetcore.detect import detect_inserts
 from nutcore import library, pipeline
 from nutcore.gcode import inject as gcode_inject
 from nutcore.report import ERROR, WARNING, Report
@@ -31,6 +37,8 @@ _edges: tuple = ("", [])       # (snapshot fingerprint, segments)
 # (is_error, text) from the last export, for the UI thread to show once. The export runs on
 # the slicing thread, where a notification could deadlock.
 pending_export_warning: tuple | None = None
+# (degrees, where from) the last export used for heat-set inserts, for the Heat-set tab.
+last_insert_temperature: tuple | None = None
 
 STALE_MESSAGE = ("E_STALE: the nut report is out of date. Run Check nuts (Plugins window or "
                  "the Nut panel), then slice again.")
@@ -39,10 +47,10 @@ STALE_MESSAGE = ("E_STALE: the nut report is out of date. Run Check nuts (Plugin
 def reset() -> None:
     """Forget everything. Used by tests."""
     global report, stale, config_owner, panel, last_check_seconds, _notified, _edges
-    global pending_export_warning
+    global pending_export_warning, last_insert_temperature
     report, stale, config_owner, panel = None, False, None, None
     last_check_seconds, _notified, _edges = 0.0, frozenset(), ("", [])
-    pending_export_warning = None
+    pending_export_warning = last_insert_temperature = None
     tabs.clear()
     activity.clear()
     _steps_seen.clear()
@@ -110,7 +118,7 @@ def read_config() -> tuple[dict, str | None]:
 # --- The check ------------------------------------------------------------------------------
 
 def run_check():
-    """Snapshot the model, detect, cache the report and tell the pages."""
+    """Snapshot the model, find nuts and heat-set inserts, cache the report, tell the pages."""
     global report, stale, last_check_seconds
     show_export_warning()
     start = time.perf_counter()
@@ -118,7 +126,9 @@ def run_check():
     try:
         config, problem = read_config()
         lib = library.parse(config)
-        new = pipeline.detect(adapter.snapshot(), lib)
+        snap = adapter.snapshot()
+        new = pipeline.detect(snap, lib)
+        new.nuts += detect_inserts(snap, lib, first_index=len(new.nuts) + 1)
     except Exception as exc:
         broadcast({"type": "error", "message": f"Nut check failed: {exc}"})
         raise
@@ -129,9 +139,16 @@ def run_check():
         broadcast({"type": "error", "message": problem})
     _notify(new)
     s = new.summary
-    text = f"{len(new.nuts)} nut(s): {s['ok']} ok, {s['warning']} warning, {s['error']} error"
+    text = f"{_what(new)}: {s['ok']} ok, {s['warning']} warning, {s['error']} error"
     note(f"check: {text}, {last_check_seconds * 1000:.0f} ms")
     return adapter.success(text)
+
+
+def _what(current: Report) -> str:
+    """'2 nut(s)', or '2 nut(s), 3 heat-set insert(s)' when there are inserts."""
+    inserts = sum(1 for n in current.nuts if n.kind == "heatset")
+    text = f"{len(current.nuts) - inserts} nut(s)"
+    return text + (f", {inserts} heat-set insert(s)" if inserts else "")
 
 
 def check_action():
@@ -175,7 +192,7 @@ def _notify(new: Report) -> None:
     stamp = time.strftime("%H:%M:%S")
     if not problems:
         if had_problems:
-            adapter.notify_info(f"Nut check {stamp}: all clear, {len(new.nuts)} nut(s) OK. "
+            adapter.notify_info(f"Nut check {stamp}: all clear, {_what(new)} OK. "
                                 "Earlier nut messages no longer apply.")
         return
     if not fresh:
@@ -202,50 +219,98 @@ def slice_gate():
     failing = [n for n in current.nuts if n.status == "error"]
     config, _ = read_config()
     if failing and config["settings"]["on_error"] == "block":
-        shown = []
-        for n in failing[:5]:
-            shown.append(next(f.message for f in n.findings if f.level == ERROR))
-        more = f" (and {len(failing) - 5} more nuts)" if len(failing) > 5 else ""
-        note(f"slice gate: blocked by {len(failing)} nut(s) with errors")
-        return adapter.failure("Nut check failed. " + " ".join(shown) + more)
-    return adapter.success(f"{len(current.nuts)} nut(s) checked")
+        reasons: list[str] = []
+        for n in failing:
+            reason = _reason(n, next(f for f in n.findings if f.level == ERROR))
+            if reason not in reasons:
+                reasons.append(reason)
+        more = f" (and {len(reasons) - 5} more)" if len(reasons) > 5 else ""
+        note(f"slice gate: blocked by {len(failing)} item(s) with errors")
+        return adapter.failure("Nut check failed. " + " ".join(reasons[:5]) + more)
+    return adapter.success(f"{_what(current)} checked")
+
+
+def _reason(record, problem) -> str:
+    """A finding's message for the gate. A profile problem is the same for every insert of
+    that profile, so it is shown once, without the insert's label."""
+    prefix = record.label + ": "
+    if problem.code == "E_PROFILE" and problem.message.startswith(prefix):
+        return problem.message[len(prefix):]
+    return problem.message
 
 
 def export(ctx):
-    """At psGCodePostProcess. Edits the G-code file in place, or leaves it untouched."""
+    """At psGCodePostProcess. Edits the G-code file in place, or leaves it untouched.
+
+    Nut blocks first (nutcore.gcode.inject), then the heat-set header, preheats and blocks
+    on that output (heatsetcore.export). Either refusing leaves the file as Orca wrote it.
+    """
+    global last_insert_temperature
     current = report
     if current is None or stale or current.stale:
         note("export: failed, the report is missing or out of date")
         _warn_after_export(True, "refused. " + STALE_MESSAGE)
         return adapter.failure(STALE_MESSAGE)
     if not current.nuts:
-        note("export: no nuts in the report, file left alone")
+        note("export: no nuts or inserts in the report, file left alone")
         return adapter.success()
     config, _ = read_config()
+    lib = library.parse(config)
     path = adapter.gcode_path(ctx)
     flavor = adapter.config_value(ctx, "gcode_flavor")
     note(f"export: started on {path!r}, gcode_flavor={flavor!r}")
     with open(path, "rb") as handle:
         text = handle.read().decode("utf-8", "surrogateescape")
-    result = gcode_inject.inject(text, current, library.parse(config),
-                                 flavor=flavor,
-                                 print_sequence=adapter.config_value(ctx, "print_sequence"))
-    if result.changed:
+    nuts = gcode_inject.inject(text, current, lib, flavor=flavor,
+                               print_sequence=adapter.config_value(ctx, "print_sequence"))
+    print(f"Nut insert: {nuts.status}: {nuts.message}")
+    note(f"export: nuts: {nuts.status}: {nuts.message}")
+    if nuts.status == gcode_inject.FAILURE:
+        _warn_after_export(True, "refused. " + nuts.message)
+        return adapter.failure(nuts.message)
+
+    has_inserts = any(n.kind == "heatset" for n in current.nuts)
+    heat = heatset_export.export(nuts.text, current.nuts, lib, version=nutcore.__version__,
+                                 filament_type=_first_filament(
+                                     adapter.config_value(ctx, "filament_type")))
+    if has_inserts:
+        info = heatset_export.export_info(heat)
+        for n in current.nuts:
+            if n.kind == "heatset" and n.label in info:
+                n.export = info[n.label]
+        if heat.temperature is not None:
+            last_insert_temperature = (heat.temperature, heat.temperature_source)
+        print(f"Nut insert: heat-set: {heat.status}: {heat.message}")
+        note(f"export: heat-set: {heat.status}: {heat.message}")
+    if heat.status == heatset_place.FAILURE:
+        _warn_after_export(True, "refused. " + heat.message)
+        return adapter.failure(heat.message)
+
+    if nuts.status != gcode_inject.SKIPPED:     # only now is the nut half sure to be written
+        for old, new in zip(current.nuts, nuts.report.nuts, strict=True):
+            if old.kind == "nut":
+                old.export = new.export  # shown the next time a page asks for the report
+    if nuts.changed or heat.changed:
         with open(path, "wb") as handle:
-            handle.write(result.text.encode("utf-8", "surrogateescape"))
-    if result.status != gcode_inject.SKIPPED:
-        for old, new in zip(current.nuts, result.report.nuts, strict=True):
-            old.export = new.export      # shown the next time a page asks for the report
-    print(f"Nut insert: {result.status}: {result.message}")
-    note(f"export: {result.status}: {result.message}")
-    if result.status == gcode_inject.FAILURE:
-        _warn_after_export(True, "refused. " + result.message)
-        return adapter.failure(result.message)
-    if result.left_out:
-        _warn_after_export(False, _left_out_text(result.left_out))
-    if result.status == gcode_inject.SKIPPED:
-        return adapter.skipped(result.message)
-    return adapter.success(result.message)
+            handle.write(heat.text.encode("utf-8", "surrogateescape"))
+    left_out = nuts.left_out + heat.left_out
+    if left_out:
+        _warn_after_export(False, _left_out_text(left_out))
+    has_nuts = any(n.kind == "nut" for n in current.nuts)
+    message = " ".join(part for part, used in ((nuts.message, has_nuts),
+                                                (heat.message, has_inserts)) if used)
+    skipped = nuts.status == gcode_inject.SKIPPED or heat.status == heatset_place.SKIPPED
+    if skipped and not (nuts.changed or heat.changed):
+        return adapter.skipped(message)
+    return adapter.success(message)
+
+
+def _first_filament(value) -> str | None:
+    """The first extruder's filament type from Orca's setting, "PLA;PETG" or "PLA"."""
+    if not value:
+        return None
+    first = str(value).replace(",", ";").split(";")[0].strip().strip('"')
+    return first or None
 
 
 def _warn_after_export(is_error: bool, text: str) -> None:
@@ -352,6 +417,8 @@ def _handle(message: dict, reply) -> None:
                     reply({"type": "stale"})
             if problem:
                 reply({"type": "error", "message": problem})
+            if last_insert_temperature is not None:
+                reply(_insert_temperature_message())
         elif kind == "check":
             run_check()
         elif kind == "save_config":
@@ -362,6 +429,8 @@ def _handle(message: dict, reply) -> None:
             reply({"type": "log", "lines": list(activity)})
         elif kind == "get_csv":
             reply({"type": "csv", "text": report.to_csv() if report else ""})
+        elif kind == "check_profile":
+            reply(_profile_check(message.get("profile")))
         else:
             reply({"type": "error", "message": f"Unknown message type {kind!r}"})
     except Exception as exc:
@@ -383,6 +452,19 @@ def _save_config(config, reply) -> None:
         run_check()                               # new ranges change the findings
     else:
         mark_stale()
+
+
+def _profile_check(prof) -> dict:
+    """What the Heat-set and Machine settings tabs show beside a profile being edited: the
+    broken rules, named, and the derived values once the profile is sound."""
+    problems = heatset_profile.validate_profile(prof)
+    derived = None if problems else heatset_routine.derived(prof)
+    return {"type": "profile_check", "problems": problems, "derived": derived}
+
+
+def _insert_temperature_message() -> dict:
+    temp, source = last_insert_temperature
+    return {"type": "insert_temp", "value": temp, "source": source}
 
 
 def _edges_message() -> dict:

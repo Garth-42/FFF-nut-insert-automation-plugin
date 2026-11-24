@@ -3,10 +3,11 @@
 Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
 `docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
 (0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), milestones 2
-to 4: the routine math, the RRF emitter with its golden file, and placement in a real
-export, and milestone 5: detection and checks (DECISIONS.md #46). Nothing is inserted from
-Orca yet: the plugin (milestone 6) wires detection and placement into the check and the
-export step.
+to 5: the routine math, the RRF emitter with its golden file, placement in a real export,
+detection and checks (DECISIONS.md #46), and milestone 6 (wheel 0.3.0): the plugin finds
+inserts, gates the slice and writes the heat-set G-code at export, with the Heat-set and
+Machine settings tabs (DECISIONS.md #47). The printer macros the G-code calls
+(`heatset/*.g`) come in milestone 7: until then, do not run a file with heat-set blocks.
 
 ## Summary
 
@@ -403,7 +404,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 3. RRF emitter (done) | `emit.py`, RRF template set | The RRF golden file byte for byte (`tests/data/heatset_golden_rrf.gcode`); rehearse differs only in the mode value |
 | 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #45) |
 | 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #46) |
-| 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |
+| 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #47) |
 | 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |
 | 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
 | 9. Klipper | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` | The spec's Klipper golden file byte for byte; P14 |

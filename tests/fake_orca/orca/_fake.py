@@ -101,10 +101,11 @@ current_model = Model()
 
 
 def _kind(part):
-    """Parts built without a kind: nut bodies are modifiers, the rest print."""
+    """Parts built without a kind: nut and insert bodies are modifiers, the rest print."""
     if part.kind != "unknown":
         return part.kind
-    return "modifier" if "NUT_" in part.name.upper() else "part"
+    name = part.name.upper()
+    return "modifier" if "NUT_" in name or "HEATSET_" in name else "part"
 
 
 def set_model(snapshot):

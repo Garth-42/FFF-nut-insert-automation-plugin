@@ -78,6 +78,8 @@ class PlaceResult:
     inserts: list                  # Planned, one per InsertSpec
     changed: bool = False
     left_out: list = field(default_factory=list)   # (label, code, message)
+    temperature: float | None = None               # the insert temperature used
+    temperature_source: str = ""                   # where it came from
 
 
 # --- Reading the file -----------------------------------------------------------------------
@@ -244,11 +246,17 @@ def _print_order(label: str) -> Finding:
 # --- The whole file -------------------------------------------------------------------------
 
 def place(text: str, inserts, prof: dict, *, on_error: str = "block", version: str = "",
-          filament_type: str | None = None) -> PlaceResult:
-    """Write the header, preheat lines and blocks for these inserts, or say why not."""
+          filament_type: str | None = None, refused=(), by_hand=()) -> PlaceResult:
+    """Write the header, preheat lines and blocks for these inserts, or say why not.
+
+    refused: (label, code, message) for inserts whose checks failed before the export;
+    they count as failing inserts here, like those the G-code fails. by_hand: (label,
+    code, message) for inserts the printer cannot press (tilted, inverted), named in a
+    comment so the file says what to fit by hand.
+    """
     if HEADER_MARK in text:
         return PlaceResult(SKIPPED, "The file already has heat-set blocks.", text, [])
-    if not inserts:
+    if not inserts and not refused and not by_hand:
         return PlaceResult(SUCCESS, "No heat-set inserts.", text, [])
     parsed = parse(text)
     planned = [plan_insert(parsed, spec, prof) for spec in inserts]
@@ -278,22 +286,25 @@ def place(text: str, inserts, prof: dict, *, on_error: str = "block", version: s
         placed = [p for p in order if p.ok]
         blocks = _blocks(parsed, placed, prof)
 
-    failed = [(p, next(f for f in p.findings if f.level == ERROR)) for p in planned
-              if any(f.level == ERROR for f in p.findings)]
-    left_out = [(p.spec.label, f.code, " ".join(f.message.split())) for p, f in failed]
+    failed = [(label, code, " ".join(message.split())) for label, code, message in refused]
+    for p in planned:
+        first = next((f for f in p.findings if f.level == ERROR), None)
+        if first is not None:
+            failed.append((p.spec.label, first.code, " ".join(first.message.split())))
+    found = dict(temperature=temp, temperature_source=source)
     if failed and on_error == "block":
-        shown = "; ".join(f.message for _, f in failed[:5])
+        shown = "; ".join(message for _, _, message in failed[:5])
         more = f" (and {len(failed) - 5} more)" if len(failed) > 5 else ""
         return PlaceResult(FAILURE, f"Heat-set inserts: {shown}{more}", text, planned,
-                           left_out=left_out)
-    if not placed and not failed:
-        return PlaceResult(SUCCESS, "No heat-set inserts in this file.", text, planned)
+                           left_out=failed, **found)
+    if not placed and not failed and not by_hand:
+        return PlaceResult(SUCCESS, "No heat-set inserts in this file.", text, planned, **found)
 
     before: dict[int, list[str]] = {}                # lines to write before line i
     after: dict[int, list[str]] = {}                 # lines to write after line i
     head = _header_line(parsed)
-    header = [emit.ascii_text(f"; HEATSET skipped {p.spec.label}: {f.code} {f.message}")
-              for p, f in failed]
+    header = [_comment("skipped", label, code, message) for label, code, message in failed]
+    header += [_comment("by hand", label, code, message) for label, code, message in by_hand]
     if placed:
         header = emit.header_lines(prof, len(placed), temp, version, source) + header
     before[head] = header
@@ -323,8 +334,16 @@ def place(text: str, inserts, prof: dict, *, on_error: str = "block", version: s
     message = f"{len(placed)} heat-set insert(s) in {len(blocks)} block(s)"
     if failed:
         message += f", {len(failed)} left out"
+    if by_hand:
+        message += f", {len(by_hand)} to fit by hand"
     return PlaceResult(SUCCESS, message + ".", "".join(out), planned, changed=True,
-                       left_out=left_out)
+                       left_out=failed, **found)
+
+
+def _comment(what: str, label: str, code: str, message: str) -> str:
+    """One G-code comment naming an insert left out; its message without the label."""
+    text = message[len(label) + 2:] if message.startswith(label + ": ") else message
+    return emit.ascii_text(f"; HEATSET {what} {label}: {code} {text}")
 
 
 def _blocks(parsed: Parsed, placed: list, prof: dict) -> list[list]:

@@ -44,7 +44,8 @@ def inject(text: str, report: Report, lib: Library, flavor: str | None = None,
         message = ("E_STALE: the model changed after the last nut check. Run Check nuts, "
                    "then slice and export again.")
         return InjectResult(FAILURE, message, text, out)
-    if not out.nuts:
+    nuts = [record for record in out.nuts if record.kind == "nut"]   # inserts: heatsetcore
+    if not nuts:
         return InjectResult(SUCCESS, "No nuts in the report.", text, out)
 
     settings = lib.settings
@@ -55,7 +56,7 @@ def inject(text: str, report: Report, lib: Library, flavor: str | None = None,
     failed = []     # (record, finding) for nuts that cannot be inserted because of an error
     passed = []     # records left out without an error: tilted, rolled
 
-    for record in out.nuts:
+    for record in nuts:
         record.export = None
         nut = lib.get(record.key)
         measured = (record.cls in PLACEABLE and nut is not None and record.box is not None

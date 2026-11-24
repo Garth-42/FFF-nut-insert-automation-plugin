@@ -55,7 +55,7 @@ the difference here and change only the `nut_inserter` package.
 | `ctx.object` | A `PrintObject` for object-scoped steps, else `None` | |
 | `PrintObject.layers()`, `Layer.print_z`, `slice_z`, `height`, `lslices()` | Layers bottom-up; `lslices` are the merged islands of a layer | Layer heights and pocket outlines without parsing G-code; maybe cutting the pocket out of the layers |
 | `ctx.gcode_path`, `ctx.output_name`, `ctx.host` | Set only at `psGCodePostProcess` | |
-| `ctx.config_value(key)` | "Serialized value of a resolved print config option, or None" | Key names still unverified |
+| `ctx.config_value(key)` | "Serialized value of a resolved print config option, or None" | Key names still unverified. Used: `gcode_flavor` (works), `print_sequence`, and from 0.3.0 `filament_type` for the heat-set filament table |
 | `push_notification(level, text, hyper_text='', on_click=None)` | A clickable label | "Open the Nuts tab" |
 | `has_config_ui()`, `get_config_ui()` | A capability's own settings page inside the Plugins dialog, with `window.orca.getConfig()/saveConfig()` | An alternative home for the library editor |
 | `orca.host.plugin.storage` | Unknown | |

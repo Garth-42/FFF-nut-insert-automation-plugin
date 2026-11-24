@@ -101,6 +101,27 @@ included, so expect to add it again after installing a newer wheel.
 
   Result:
 
+- [ ] **F, Heat-set check and tabs** (wheel 0.3.0). Add a Ø4 × 6.7 mm hole to a test part
+  and a cylinder body Ø4.6 × 5.7 mm in it, flush with the top, named `HEATSET_M3x5.7`, set
+  to Modifier. Press Check nuts. Expect the insert in the report after the nuts, with
+  `E_PROFILE` naming the values still to measure. Open the panel's Heat-set and Machine
+  settings tabs: every placeholder carries a TBD badge, the derived values show, and a
+  rule broken on purpose (pad drop 0.9) is named under the profile picker. Switch the
+  mode to Rehearse, save, and expect the insert to turn OK. In the Nuts tab, select the
+  insert and find its two footprints: solid with the mouth over the hole, dashed with the
+  pad over it.
+
+  Result:
+
+- [ ] **G, Heat-set export** (wheel 0.3.0, RepRapFirmware printer profile). With the
+  profile still in Rehearse mode, slice and export. Expect the header
+  (`; HEATSET profile "Concept D"`) before the first object label, `M98 P"heatset/..."`
+  lines after the layer that prints the hole's rim, and `insert_temp_used` giving the
+  print temperature plus 15 °C. Save the file as `tests/data/sample_rrf.gcode`. Do not
+  run it on the printer: the `heatset/*.g` macros come in milestone 7.
+
+  Result:
+
 ## If something does not work
 
 The plugin has only run against a stand-in `orca` module. If Orca rejects a call, the

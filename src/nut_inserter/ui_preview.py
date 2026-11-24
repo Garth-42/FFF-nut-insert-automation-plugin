@@ -1,4 +1,7 @@
-"""The Nuts tab: a wireframe preview and the report list.
+"""The Nuts tab: a wireframe preview and the report list, nuts and heat-set inserts.
+
+For an insert it also draws the tool's two footprints at the insert's top: mouth over the
+hole for the hot push (solid), and pad over the hole for the press (dashed).
 
 One self-contained HTML page kept as a Python string. The 3D view is drawn on
 a 2D canvas, so it needs no WebGL and no libraries.
@@ -81,7 +84,7 @@ PREVIEW_HTML = r"""<!doctype html>
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var canvas = $('canvas'), ctx = canvas.getContext('2d');
-  var report = null, edges = [], selected = -1, isStale = false;
+  var report = null, edges = [], selected = -1, isStale = false, config = null;
   var cam = {target: [0, 0, 0], yaw: -1.0, pitch: 0.6, dist: 200};
   var ICON = {ok: '✓', warning: '!', error: '✕'};
 
@@ -127,6 +130,40 @@ PREVIEW_HTML = r"""<!doctype html>
     if (p && q) { ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); }
   }
   function add(p, v, s) { return [p[0] + v[0] * s, p[1] + v[1] * s, p[2] + v[2] * s]; }
+  function circle(project, cx, cy, z, r) {
+    for (var i = 0; i < 48; i++) {
+      var a = 2 * Math.PI * i / 48, b = 2 * Math.PI * (i + 1) / 48;
+      line(project, [cx + r * Math.cos(a), cy + r * Math.sin(a), z],
+           [cx + r * Math.cos(b), cy + r * Math.sin(b), z]);
+    }
+  }
+  function profileFor(n) {
+    var list = config && config.heatset && config.heatset.profiles || [];
+    var key = (n.key || '').toUpperCase();
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].insert_key).toUpperCase() === key) { return list[i]; }
+    }
+    return null;
+  }
+  // The tool around an insert: mouth over the hole in the hot push (solid: heater block,
+  // and the pad beside the hole), pad over the hole in the press (dashed: pad, and the
+  // heater block and tube tip beside it). docs/HEATSET_GCODE_SPEC.md, rule 8.
+  function footprints(project, n, strong) {
+    var p = profileFor(n);
+    if (!p || !n.placement || n.z_high == null) { return; }
+    var x = n.placement[0], y = n.placement[1], z = n.z_high, dx = p.pad_dx, dy = p.pad_dy;
+    ctx.save();
+    ctx.strokeStyle = css('--accent') || '#009688';
+    ctx.globalAlpha = strong ? 0.9 : 0.3; ctx.lineWidth = 1;
+    ctx.setLineDash([]); ctx.beginPath();
+    circle(project, x, y, z, p.block_r); circle(project, x + dx, y + dy, z, p.pad_d / 2);
+    ctx.stroke();
+    ctx.setLineDash([5, 4]); ctx.beginPath();
+    circle(project, x, y, z, p.pad_d / 2); circle(project, x - dx, y - dy, z, p.block_r);
+    circle(project, x - dx, y - dy, z, p.tube_od / 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // --- Drawing -----------------------------------------------------------------------------
   function draw() {
@@ -149,6 +186,9 @@ PREVIEW_HTML = r"""<!doctype html>
     ctx.globalAlpha = 1;
 
     if (!report) { return; }
+    report.nuts.forEach(function (n, index) {
+      if (n.kind === 'heatset') { footprints(project, n, index === selected); }
+    });
     report.nuts.forEach(function (n, index) {
       if (!n.box) { return; }
       var colour = css('--' + (n.status === 'ok' ? 'ok' : n.status === 'warning' ? 'warn' : 'err'));
@@ -236,11 +276,14 @@ PREVIEW_HTML = r"""<!doctype html>
   function renderList() {
     var list = $('list');
     list.textContent = '';
-    $('count').textContent = report ? report.nuts.length + ' nut(s): ' + report.summary.ok + ' ok, ' +
+    var inserts = report ? report.nuts.filter(function (n) { return n.kind === 'heatset'; }).length : 0;
+    $('count').textContent = report ? (report.nuts.length - inserts) + ' nut(s)' +
+      (inserts ? ', ' + inserts + ' insert(s)' : '') + ': ' + report.summary.ok + ' ok, ' +
       report.summary.warning + ' warning, ' + report.summary.error + ' error' : 'No report yet';
     if (!report) { return; }
     if (!report.nuts.length) {
-      list.appendChild(el('div', 'sub', 'No bodies named NUT_<key> in this project.'));
+      list.appendChild(el('div', 'sub',
+        'No bodies named NUT_<key> or HEATSET_<key> in this project.'));
     }
     report.nuts.forEach(function (n, index) {
       var row = el('div', 'nut' + (index === selected ? ' selected' : ''));
@@ -272,6 +315,7 @@ PREVIEW_HTML = r"""<!doctype html>
       table.appendChild(tr);
     }
     function xyz(p) { return p ? 'X ' + fmt(p[0]) + '  Y ' + fmt(p[1]) + '  Z ' + fmt(p[2]) : '–'; }
+    if (n.kind === 'heatset') { insertDetail(n, row, xyz); } else {
     row('Nut', '#' + n.index + ', ' + n.name + ', object ' + n.object + ', copy ' + n.instance);
     row('Pocket centre', n.box ? xyz(n.box.centre) : '–');
     row('Placement', xyz(n.placement) + (n.z_low != null ? ', lowest point ' + fmt(n.z_low) : ''));
@@ -287,7 +331,12 @@ PREVIEW_HTML = r"""<!doctype html>
     if (n.export && n.export.layer_z != null) {
       row('Exported', 'after layer ' + n.export.layer + ', Z ' + fmt(n.export.layer_z));
     }
+    }
     host.appendChild(table);
+    if (n.kind === 'heatset' && n.placement && profileFor(n)) {
+      host.appendChild(el('div', 'muted', 'Tool footprints at the insert top: solid, mouth ' +
+        'over the hole (hot push); dashed, pad over the hole (press).'));
+    }
     if (!n.findings.length) { host.appendChild(el('div', 'finding ok', 'OK')); }
     n.findings.forEach(function (f) {
       var d = el('div', 'finding');
@@ -295,6 +344,27 @@ PREVIEW_HTML = r"""<!doctype html>
       d.appendChild(document.createTextNode(f.message));
       host.appendChild(d);
     });
+  }
+
+  function insertDetail(n, row, xyz) {
+    row('Insert', '#' + n.index + ', ' + n.name + ', object ' + n.object + ', copy ' + n.instance);
+    if (n.placement) {
+      row('Hole axis', 'X ' + fmt(n.placement[0]) + '  Y ' + fmt(n.placement[1]));
+      row('Insert top', 'Z ' + fmt(n.z_high) + (n.rim_z != null ? ', hole rim Z ' + fmt(n.rim_z) : ''));
+    } else if (n.modelled_centre) {
+      row('Body centre', xyz(n.modelled_centre));
+    }
+    var h = n.pocket;
+    if (h) {
+      row('Hole measured', 'Ø ' + fmt(h.diameter, 2) + (h.through ? ' mm, through' :
+        ' × ' + fmt(h.depth, 2) + ' mm deep') + (h.wall != null ? ', wall ' + fmt(h.wall, 2) + ' mm' : ''));
+      if (h.surface_tilt != null) { row('Surface tilt', fmt(h.surface_tilt, 2) + '°'); }
+    }
+    if (n.export && n.export.block != null) {
+      row('Exported', 'block ' + n.export.block + ', after the layer at Z ' + fmt(n.export.z_top));
+    } else if (n.export && n.export.skipped) {
+      row('Exported', 'left out: ' + n.export.skipped);
+    }
   }
 
   // --- Mouse -------------------------------------------------------------------------------
@@ -374,6 +444,9 @@ PREVIEW_HTML = r"""<!doctype html>
     } else if (m.type === 'stale') {
       setStale(true);
       if (document.visibilityState === 'visible') { send({type: 'check'}); }
+    } else if (m.type === 'config') {
+      config = m.config;
+      redraw();
     } else if (m.type === 'csv') {
       showExport(m.text);
     } else if (m.type === 'error') {

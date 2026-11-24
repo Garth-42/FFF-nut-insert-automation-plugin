@@ -186,8 +186,8 @@ def tbd_problem(profile: dict) -> str | None:
     if profile.get("mode") == "rehearse" or not profile.get("tbd"):
         return None
     return (f"heat-set profile {profile.get('name')!r}: rule 5: measure "
-            f"{', '.join(profile['tbd'])} and enter them in the Nut panel, or switch the "
-            "profile to rehearse mode")
+            f"{', '.join(profile['tbd'])} and enter them in the Nut panel (Machine settings "
+            "and Heat-set tabs), or switch the profile to rehearse mode")
 
 
 def magazine_problem(profile: dict, count: int) -> str | None:

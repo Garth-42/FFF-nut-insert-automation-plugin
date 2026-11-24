@@ -1,13 +1,14 @@
 """Plugin-layer tests, run against the stand-in orca module in tests/fake_orca."""
 
 import json
+import re
 import types
 
 import orca
 import pytest
 
 import nut_inserter
-from builders import gcode_ring, nut, pocket_block, snapshot
+from builders import gcode_ring, hole_block, insert_body, nut, pocket_block, scene, snapshot
 from nut_inserter import adapter, permissions, state
 from nutcore import library
 from nutcore.mesh import rotation, translation
@@ -296,6 +297,26 @@ def test_pages_are_self_contained():
         assert "window.orca.postMessage" in html and "window.orca.onMessage" in html
 
 
+def _page_fields(html: str, name: str) -> list[str]:
+    """The names a field list of the panel edits: the first item of each entry."""
+    block = html.split(f"var {name} = [", 1)[1].split("\n  ];", 1)[0]
+    return re.findall(r"^ {4}\['([A-Za-z_]+)',", block, re.MULTILINE)
+
+
+def test_the_panel_edits_every_heat_set_variable_once():
+    from heatsetcore.profile import GROUPS, MACHINE_FIELDS, default_profile
+    from heatsetcore.routine import derived
+
+    machine = _page_fields(nut_inserter.PANEL_HTML, "MACHINE_FIELDS")
+    heatset = _page_fields(nut_inserter.PANEL_HTML, "HEATSET_FIELDS")
+    every = {n for group in GROUPS.values() for n in group}
+    assert sorted(machine) == sorted({"name", *MACHINE_FIELDS})
+    assert sorted(heatset) == sorted(every - set(MACHINE_FIELDS))
+    shown = re.findall(r"\['([A-Za-z_]+)', '", nut_inserter.PANEL_HTML.split(
+        "var DERIVED = [", 1)[1].split("];", 1)[0])
+    assert shown == list(derived(default_profile()))
+
+
 def test_only_the_plugin_package_imports_orca():
     from pathlib import Path
 
@@ -390,8 +411,163 @@ def test_activity_list_records_slicing_and_export(plugin, tmp_path):
     assert sum("slicing step posSlice reached" in line for line in lines) == 1
     assert "check: 1 nut(s): 1 ok" in text
     assert "export: started on" in text and "gcode_flavor='klipper'" in text
-    assert "export: success: 1 nut insert block(s) written." in text
+    assert "export: nuts: success: 1 nut insert block(s) written." in text
     assert "ERROR in export: FileNotFoundError" in text
+
+
+# --- Heat-set inserts ------------------------------------------------------------------------
+
+HOLE = (130.0, 87.25)       # a second pocket in gcode_ring, used as a Ø2.5 x 2.0 blind hole
+
+
+def small_insert_config(on_error="block", **change) -> dict:
+    """A short insert, so gcode_ring's pocket (open from Z 4.4 to 6.4) can be its hole."""
+    config = library.default_config()
+    config["settings"]["on_error"] = on_error
+    config["heatset"]["profiles"][0].update({
+        "insert_key": "M2x1.5", "insert_length": 1.5, "insert_od": 3.0, "hole_d_min": 2.3,
+        "hole_d_max": 2.7, "hole_extra_depth": 0.5, "min_wall": 1.0, "tbd": [], **change})
+    return config
+
+
+def nut_and_insert():
+    insert = [hole_block(hole=2.5, depth=2.0, height=6.4),
+              insert_body(od=3.0, length=1.5, centre=(0, 0, 6.4 - 0.75), name="HEATSET_M2x1.5")]
+    return scene(([pocket_block(), nut(centre=(0, 0, 0.9))], [BED]),
+                 (insert, [translation((*HOLE, 0.0))]))
+
+
+def save(plugin, config):
+    plugin.panel.on_message({"type": "save_config", "config": config})
+    assert plugin.panel.posted[-1]["type"] != "error", plugin.panel.posted[-1]
+
+
+def test_one_check_finds_nuts_and_inserts(plugin):
+    save(plugin, small_insert_config())
+    orca._fake.set_model(nut_and_insert())
+    result = plugin.check.execute()
+    assert result.message == "1 nut(s), 1 heat-set insert(s): 2 ok, 0 warning, 0 error"
+    nut_record, insert = state.report.nuts
+    assert (nut_record.kind, nut_record.index, insert.kind, insert.index) == (
+        "nut", 1, "heatset", 2)
+    assert insert.placement == pytest.approx([*HOLE, 6.4 - 0.75], abs=1e-5)
+    reported = plugin.panel.posted[-1]["report"]["nuts"]
+    assert [n["kind"] for n in reported] == ["nut", "heatset"]
+
+
+def test_the_gate_names_an_unmeasured_profile_once(plugin):
+    config = small_insert_config()
+    del config["heatset"]["profiles"][0]["tbd"]
+    config["heatset"]["profiles"][0]["tbd"] = ["pad_dx", "magazine_capacity"]
+    save(plugin, config)
+    two = translation((HOLE[0] + 20, HOLE[1], 0.0))
+    orca._fake.set_model(scene(([hole_block(hole=2.5, depth=2.0, height=6.4), insert_body(
+        od=3.0, length=1.5, centre=(0, 0, 5.65), name="HEATSET_M2x1.5")],
+        [translation((*HOLE, 0.0)), two])))
+    plugin.check.execute()
+    assert [n.status for n in state.report.nuts] == ["error", "error"]
+    gate = plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice))
+    assert gate.status == FAIL
+    assert gate.message.count("rule 5") == 1 and "pad_dx, magazine_capacity" in gate.message
+
+    config["heatset"]["profiles"][0]["mode"] = "rehearse"
+    save(plugin, config)                         # saving checks again
+    assert plugin.insert.execute(orca._fake.Ctx(orca.slicing.Step.posSlice)).status == OK
+
+
+def two_pockets() -> str:
+    """The nut's pocket and the insert's hole, ringed close enough to be the hole's layers."""
+    return gcode_ring(centre=[(112.4, 87.25), HOLE], ring_offset=0.3)
+
+
+def _export(plugin, tmp_path, flavor="reprapfirmware"):
+    path = tmp_path / "plate_1.gcode"
+    path.write_text(two_pockets())
+    ctx = orca._fake.Ctx(orca.slicing.Step.psGCodePostProcess, gcode_path=str(path),
+                         config={"gcode_flavor": flavor, "filament_type": "PLA;PETG"})
+    orca._fake.in_slicing_step = True
+    result = plugin.insert.execute(ctx)
+    orca._fake.in_slicing_step = False
+    return result, path, ctx
+
+
+def test_export_writes_nut_blocks_then_heat_set_blocks(plugin, tmp_path):
+    save(plugin, small_insert_config())
+    orca._fake.set_model(nut_and_insert())
+    plugin.check.execute()
+    result, path, ctx = _export(plugin, tmp_path)
+    assert result.status == OK, result.message
+    assert result.message == ("1 nut insert block(s) written. "
+                              "1 heat-set insert(s) in 1 block(s).")
+    out = path.read_text().splitlines()
+    nut_block = out.index(";NUT_INSERT_BEGIN layer_z=6.400 count=1")
+    begin = out.index('M98 P"heatset/begin.g" K"M2x1.5" S225 Z11.400 C1')
+    assert nut_block < begin                     # a nut block due at the same point goes first
+    assert "; insert_temp_used = 225 (filament table, PLA)" in out
+    nut_record, insert = state.report.nuts
+    assert nut_record.export["layer_z"] == pytest.approx(6.4)
+    assert (insert.export["block"], insert.export["z_top"]) == (1, pytest.approx(6.4))
+    assert state.last_insert_temperature == (225.0, "filament table, PLA")
+
+    text = path.read_text()
+    assert plugin.insert.execute(ctx).status == SKIP          # Orca may run the step twice
+    assert path.read_text() == text
+    plugin.panel.on_message({"type": "ready"})
+    assert {"type": "insert_temp", "value": 225.0, "source": "filament table, PLA"} in (
+        plugin.panel.posted)
+
+
+def test_a_failing_insert_is_left_out_and_the_pop_up_names_it(plugin, tmp_path):
+    save(plugin, small_insert_config(on_error="skip", hole_d_max=2.4))     # the hole is 2.5
+    orca._fake.set_model(nut_and_insert())
+    plugin.check.execute()
+    assert state.report.nuts[1].findings[0].code == "E_HOLE_DIAMETER"
+    result, path, _ = _export(plugin, tmp_path)
+    assert result.status == OK and "1 left out" in result.message
+    text = path.read_text()
+    assert ";NUT_INSERT_BEGIN" in text
+    assert "; HEATSET skipped HEATSET_M2x1.5 #2: E_HOLE_DIAMETER" in text
+    assert state.report.nuts[1].export == {"skipped": "E_HOLE_DIAMETER"}
+    plugin.check.on_lifecycle_event(EV.GCodeExportFinished, None)
+    level, message = orca._fake.notifications[-1]
+    assert level == orca.host.ui.NotificationLevel.WarningNotificationLevel
+    assert "1 item(s) left out" in message and "HEATSET_M2x1.5 #2 (E_HOLE_DIAMETER)" in message
+
+
+def test_a_print_with_only_inserts(plugin, tmp_path):
+    save(plugin, small_insert_config())
+    orca._fake.set_model(scene(([hole_block(hole=2.5, depth=2.0, height=6.4), insert_body(
+        od=3.0, length=1.5, centre=(0, 0, 5.65), name="HEATSET_M2x1.5")],
+        [translation((*HOLE, 0.0))])))
+    assert plugin.check.execute().message == (
+        "0 nut(s), 1 heat-set insert(s): 1 ok, 0 warning, 0 error")
+    result, path, _ = _export(plugin, tmp_path)
+    assert (result.status, result.message) == (OK, "1 heat-set insert(s) in 1 block(s).")
+    assert ";NUT_INSERT_BEGIN" not in path.read_text()
+
+
+def test_a_failing_insert_refuses_the_export_when_errors_block(plugin, tmp_path):
+    save(plugin, small_insert_config(hole_d_max=2.4))
+    orca._fake.set_model(nut_and_insert())
+    plugin.check.execute()
+    result, path, _ = _export(plugin, tmp_path)
+    assert result.status == FAIL and "E_HOLE_DIAMETER" not in result.message
+    assert "hole diameter 2.50 mm" in result.message
+    assert path.read_text() == two_pockets()                      # left as Orca wrote it
+    assert state.report.nuts[0].export is None                    # its block was not written
+
+
+def test_profile_check_names_the_rule_and_gives_derived_values(plugin):
+    config = library.default_config()
+    good = config["heatset"]["profiles"][0]
+    plugin.panel.on_message({"type": "check_profile", "profile": good})
+    reply = plugin.panel.posted[-1]
+    assert reply["type"] == "profile_check" and reply["problems"] == []
+    assert reply["derived"]["push"] == pytest.approx(0.8 + 0.0 + 5.7 - 1.1)
+    bad = {**good, "pad_drop": 0.9}
+    plugin.panel.on_message({"type": "check_profile", "profile": bad})
+    reply = plugin.panel.posted[-1]
+    assert reply["derived"] is None and any("rule 1" in p for p in reply["problems"])
 
 
 def test_plugin_survives_being_loaded_again(plugin):
