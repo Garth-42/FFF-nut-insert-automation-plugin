@@ -1,8 +1,8 @@
 # Heat-set inserts: plan
 
-Nov 24, 2026 · revision 4: RepRapFirmware first, after your answers and
-`docs/HEATSET_GCODE_SPEC.md`. Milestone 0 is built (wheel 0.2.4); the heat-set work itself is
-not started.
+Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
+`docs/HEATSET_GCODE_SPEC.md`. Milestone 0 and the export pop-up are built (wheels 0.2.4 and 0.2.5); the
+heat-set work itself is not started.
 
 ## Summary
 
@@ -34,7 +34,12 @@ What changed since revision 1:
 | Body name | `HEATSET_<key>`, where key is the profile's `insert_key`, for example `HEATSET_M3x5.7` | Your answer, 24 Nov. The spec said `HSI_<key>` |
 | Insert height | `z_top` is the top of the modelled body, snapped to the top of the layer that prints it. To be checked later against the hole's rim | Your answer, 24 Nov |
 | When | `after_layer` by default: right after the layer that prints `z_top`. `end_of_print` stays available | Your answer, 24 Nov. The spec's default was `end_of_print` |
-| Temperature | From the G-code: the print tool's target temperature plus an offset. A profile value overrides | Your answer, 24 Nov |
+| Temperature | A manual override in the panel (blank: automatic); else the print tool's target temperature in the G-code plus `insert_temp_offset` (+15 °C); else your filament table | Your answers, 24 Nov |
+| Tilted or inverted insert | A warning and no insert command (`W_TILTED`, `W_INVERTED`). A vertical hole in a surface that is not flat is still refused (`E_SURFACE`) | Your answer, 24 Nov |
+| Magazine capacity | A profile variable, `magazine_capacity`, TBD until measured. Rule 9 refuses a print with more inserts | Your answer, 24 Nov |
+| Hold-down warning | Two TBD profile variables: `min_contact_area` (mm²) and `max_height_ratio` (height ÷ √area). Warn when a part fails either | Your answer, 24 Nov |
+| Insert errors | With `on_error: skip` a failing insert is left out and named in a comment, as nuts are. An export with any errors raises a pop-up warning once it finishes, built for nuts in wheel 0.2.5 | Your answer, 24 Nov; DECISIONS.md #40 |
+| Panel layout | A Machine settings tab for the heat-set tool's hardware values, apart from the process settings | Your suggestion, 24 Nov |
 | Insert size | One per tool, in the tool profile | Spec |
 | Routine | The spec's eleven steps, header, preheat, blocks, rehearse mode | Spec |
 | Where code goes | `heatsetcore` beside `nutcore`; Orca glue in `nut_inserter`; RRF macros under `macros/heatset/` | Spec |
@@ -175,20 +180,8 @@ labels. A real RRF export should confirm them when you can make one.
 
 ## Still open
 
-1. **Orientation.** An insert whose axis is not vertical with the open end up: a warning and no
-   insert (your integration plan), or an export refusal (the spec's rule 7)? Proposal: a warning
-   when the body's orientation is wrong; a refusal when a vertical hole's surrounding surface is
-   not flat, because the pad cannot probe or press there.
-2. **Magazine capacity.** Rule 9 needs a number. Add `magazine_capacity` to the profile, marked TBD?
-3. **Hold-down rule.** Proposal: two TBD profile values, a minimum bed contact area in mm² and a
-   maximum of height ÷ √area. Warn when a part fails either.
-4. **Temperature order:** the profile value; else the print temperature plus `insert_temp_offset`
-   (new, default +15 °C); else your filament table. Is that right?
-5. **Insert errors and `on_error`:** does `on_error: skip` apply to inserts (leave the insert out
-   and name it in a comment), or does any insert error refuse the export, as the spec says?
-
-Not a question, for later: an Orca export of a test part with your RRF printer profile, saved as
-`tests/data/sample_rrf.gcode`, to confirm the placement rules on real RRF output.
+No questions are open. For later: an Orca export of a test part with your RRF printer profile,
+saved as `tests/data/sample_rrf.gcode`, to confirm the placement rules on real RRF output.
 
 ## Architecture
 
@@ -229,8 +222,10 @@ Schema 2 adds a `heatset` section beside `settings` and `nuts`:
     "insert_key": "M3x5.7", "insert_length": 5.7, "insert_od": 4.6,
     "rest_recess": 0.0, "pad_dx": 20.0, "pad_dy": 0.0, "pad_drop": 0.4,
     "insert_temp": null, "insert_temp_offset": 15,
+    "magazine_capacity": 12, "min_contact_area": 100.0, "max_height_ratio": 3.0,
     "tbd": ["rest_recess", "pad_dx", "pad_dy", "pad_drop", "block_r", "block_clearance",
-            "trip_overtravel", "float_travel", "trip_force", "tool"]
+            "trip_overtravel", "float_travel", "trip_force", "tool", "magazine_capacity",
+            "min_contact_area", "max_height_ratio"]
   }]
 }
 ```
@@ -244,8 +239,12 @@ rather than the spec's `rrf`.
 - Every variable holds a number. `tbd` lists the ones not yet measured, which hold the spec's
   placeholders. Entering a value in the panel takes it off the list. In normal mode, inserts in
   the model with anything on the list fail the slice gate, naming the variables. Rehearse mode runs.
-- `insert_temp: null` means take it from the G-code. `insert_temp_offset` is new: it puts the
-  spec's "print temperature + 10–20 °C" into a number.
+- `insert_temp` is the panel's manual override: `null` (blank) means automatic. Automatic is the
+  print tool's target temperature in the G-code plus `insert_temp_offset`, which puts the spec's
+  "print temperature + 10–20 °C" into a number. A file that sets no temperature falls back to
+  your filament table (PLA 225, PETG 245, ABS and ASA 265), using `filament_type`.
+- `magazine_capacity`, `min_contact_area` and `max_height_ratio` are new, and TBD until measured.
+  The hold-down placeholders (100 mm², 3.0) are guesses, like every TBD placeholder.
 - Migrating schema 1 to 2 adds the default profile and changes nothing else. `state.read_config`
   runs it. Today a schema mismatch makes `read_config` fall back to the defaults, and the next save
   from the panel would overwrite your tuned nut ranges.
@@ -261,7 +260,7 @@ For each `HEATSET_` body, per copy on the plate:
    is `E_BODY_SIZE`. The axis line runs through the area-weighted centre of the cap triangles.
 2. **Class.** `UPRIGHT` when the axis is within `axis_tolerance_deg` of vertical and the hole opens
    upward at its rim. `INVERTED` when the hole's top end is a ceiling and it opens downward. `TILTED`
-   otherwise. How the last two are reported is open question 1.
+   otherwise. The last two are warnings and get no insert command: install by hand.
 3. **Hole axis and diameter.** From five points along the body's axis, cast 16 rays outward from
    each. Fit a circle to the hits by least squares, then cast again from the fitted centre. The
    centre is the hole axis and gives X and Y; a body modelled off-centre is placed in the hole's
@@ -300,7 +299,7 @@ The axis and a two-pass hole fit took under 10 ms together, well inside the 100 
 | 7, depth | Blind hole shallower than `insert_length + hole_extra_depth` | Error | `E_DEPTH` |
 | 7, wall | Wall thinner than `min_wall` | Error | `E_WALL` (new) |
 | 7, surface | Surface around the hole not facing +Z within 0.5° | Error | `E_SURFACE` (new) |
-| 7, orientation | Axis not vertical, or the hole opens downward | Open question 1 | `W_TILTED`, `W_INVERTED` (new) |
+| 7, orientation | Axis not vertical, or the hole opens downward | Warning, no insert command | `W_TILTED`, `W_INVERTED` (new) |
 | 7, empty hole | Plastic printed in the hole (export) | Error | `E_POCKET_NOT_EMPTY` |
 | 8, keep-out | Something printed in a tool footprint before the block (export) | Error | `E_KEEP_OUT` (new), naming the blocked side |
 | 9, magazine | More inserts in the print than the magazine holds | Error | `E_MAGAZINE` (new) |
@@ -329,9 +328,12 @@ at an `after_layer` block.
 
 ## Panel and Nuts tab
 
-- **Panel:** a Heat-set tool section. It shows the profile in the spec's four groups, with TBD
-  badges, the derived values read-only, a normal/rehearse switch, and validation messages that name
-  the rule.
+- **Panel tabs**, as you suggested: **Nuts** (the nut library, as now), **Heat-set** (the spec's
+  Process and Behaviour groups, the hole limits, timing, the normal/rehearse switch, and the
+  manual temperature override with the automatic value beside it), and **Machine settings** (the
+  heat-set tool's hardware: the spec's Measured and Motion groups, the tool number, firmware and
+  magazine capacity). TBD values carry a badge, derived values are read-only, and validation
+  messages name the rule. The Activity list stays at the bottom.
 - **Nuts tab:** insert points with both tool footprints, mouth over the hole and pad over the hole,
   as your integration plan asks.
 
@@ -362,6 +364,7 @@ and the checks. In addition:
 | H17 | A lid over the hole with a gap | ok, `N_COVERED` |
 | H18 | 720-facet knurled body in a 256-facet hole | ok, under 100 ms |
 | H19 | Plain, bored and knurled bodies, and length equal to diameter, each tilted | Axis found every time |
+| H20 | A part 8 × 8 mm on the bed and 30 mm tall | `W_HOLD_DOWN` |
 | P1 | RRF variant, one insert, the nut pocket used as the hole | Header before the first object label; block after the layer's retract, wipe and object-end label |
 | P2 | RRF variant, `end_of_print` | Block after the last object-end label, before the end G-code |
 | P3 | RRF variant, `preheat_lead` 120 s | `preheat.g` at the last `M73` whose R is at least 2 above the block's |
@@ -376,6 +379,8 @@ and the checks. In addition:
 | P12 | A file already processed | Left byte-identical |
 | P13 | Object name containing `"` | Doubled inside `O"..."` |
 | P14 | P1 to P5 on the Klipper export, `tests/data/sample.gcode` | The same positions (milestone 9) |
+| P15 | More inserts than `magazine_capacity` | `E_MAGAZINE`; with `on_error: skip`, the inserts past the capacity left out, and the pop-up |
+| P16 | An insert failing the empty-hole proof, `on_error: skip` | Left out with a comment; the other inserts written; the pop-up after the export |
 
 Library and plugin cases: schema 1 migrates with every tuned nut value kept; `read_config`
 migrates a stored schema-1 config without the "not usable" message; a profile round-trips through
@@ -392,8 +397,8 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 1. Profile | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library |
 | 2. Routine math | `routine.py` | Derived values, push + L = Li + e, the heights table |
 | 3. RRF emitter | `emit.py`, RRF template set | The RRF golden file byte for byte; rehearse differs only in the mode value |
-| 4. Placement | `place.py`, export composition | P1–P13 on the RRF variants of the real export, using hand-made insert records |
-| 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H19 |
+| 4. Placement | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records |
+| 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H20 |
 | 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |
 | 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |
 | 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
