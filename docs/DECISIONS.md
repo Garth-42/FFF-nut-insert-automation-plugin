@@ -192,3 +192,18 @@ Each entry says what differs from the spec and why. Newest last.
       `min_contact_area` and `max_height_ratio` for the hold-down warning.
     - TBD is a `tbd` list of variable names; each holds the spec's placeholder until
       measured. Profiles are found by `insert_key`, which must be unique.
+
+## Heat-set inserts, milestones 2 and 3 (24 Nov 2026)
+
+43. **The RepRapFirmware template set.** The spec gives exact templates for Klipper only and
+    says RRF follows "as macro files with the same command names". `heatsetcore/emit.py`
+    writes each command as `M98 P"heatset/<name>.g"` with single-letter parameters, as
+    approved by Garth on 24 Nov 2026 (docs/heatset-plan.md, "Emitted lines"). The hot push
+    is one call (`push.g`) instead of `_HS_PUSH_START`, the ticks and `_HS_PUSH_END`, since
+    an RRF macro can loop on the float with `G38.3`; `push_step` and `ticks` stay in the
+    profile and the header for Klipper. Speeds are mm/s with one decimal under `V`;
+    temperatures are whole degrees, with one decimal only when there is a fraction. The
+    golden file is `tests/data/heatset_golden_rrf.gcode`.
+44. **`profile.derived` moved to `routine.derived`.** The profile module holds data and
+    validation; the routine math is in `routine.py`, with the heights table and each insert's
+    positions, so the emitter writes no number of its own.

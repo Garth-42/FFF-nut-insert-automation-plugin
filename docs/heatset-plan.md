@@ -2,8 +2,9 @@
 
 Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
 `docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
-(0.2.5) and milestone 1, the heat-set profile and settings schema 2 (0.2.6). Nothing is
-inserted yet.
+(0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), and milestones 2
+and 3, the routine math and the RRF emitter with its golden file. Nothing is inserted yet:
+placement (milestone 4) wires the emitter into the export.
 
 ## Summary
 
@@ -396,8 +397,8 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | --- | --- | --- |
 | 0. RRF ground work (done, 0.2.4) | The RRF dry-run `macros/reprapfirmware/insert_nut.g` (check the values, report them, pause with `M226`), and nut blocks moved outside object labels (`nutcore/gcode/place.py`) | Its test keeps it in step with the nut RRF template; placement tests on the real export and its RRF variants (`tests/test_place.py`) |
 | 1. Profile (done, 0.2.6) | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library (`tests/test_heatset_profile.py`) |
-| 2. Routine math | `routine.py` | Derived values, push + L = Li + e, the heights table |
-| 3. RRF emitter | `emit.py`, RRF template set | The RRF golden file byte for byte; rehearse differs only in the mode value |
+| 2. Routine math (done) | `routine.py` | Derived values, push + L = Li + e, the heights table (`tests/test_heatset_routine.py`) |
+| 3. RRF emitter (done) | `emit.py`, RRF template set | The RRF golden file byte for byte (`tests/data/heatset_golden_rrf.gcode`); rehearse differs only in the mode value |
 | 4. Placement | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records |
 | 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H20 |
 | 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |

@@ -81,15 +81,6 @@ def test_rule_9_magazine_capacity():
     assert "rule 9" in problem and "13 inserts" in problem and "holds 12" in problem
 
 
-def test_derived_values_of_the_worked_example():
-    d = profile.derived(profile.default_profile())
-    assert d["L"] == pytest.approx(0.3) and d["push"] == pytest.approx(5.4)
-    assert d["push"] + d["L"] == pytest.approx(5.7)          # Li + e: one insert per cycle
-    assert d["ticks"] == 26
-    assert (d["pad_face_in_push"], d["mouth_in_press"]) == (pytest.approx(0.4),
-                                                             pytest.approx(0.4))
-
-
 def test_insert_temperature_order():
     p = profile.default_profile()
     assert profile.insert_temperature(dict(p, insert_temp=232.0), 220.0, "PLA") == (

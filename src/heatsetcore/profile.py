@@ -229,19 +229,6 @@ def insert_temperature(profile: dict, print_temp: float | None = None,
                   f"filament table entry for {filament_type or 'this filament'}")
 
 
-def derived(profile: dict) -> dict:
-    """The spec's derived values. Never typed in; the header prints them."""
-    li, e = profile["insert_length"], profile["rest_recess"]
-    p, h, g = profile["pad_drop"], profile["mouth_gap"], profile["proud_after_hot"]
-    lift = g - h                                       # L: unsheath lift and follower feed
-    push = h + e + li - g                              # follower travel in the hot push
-    assert abs(push + lift - (li + e)) < 1e-9          # one insert per cycle
-    ticks = math.ceil(push / profile["push_step"] - EPS) + profile["resist_retries"] + 1
-    return {"L": lift, "push": push, "ticks": ticks,
-            "pad_face_in_push": h - p,                 # pad face above the surface, hot push
-            "mouth_in_press": p}                       # mouth above the surface, cold press
-
-
 def profile_for_key(profiles, key: str | None) -> dict | None:
     """The profile whose insert_key is key, ignoring case."""
     if not key:
