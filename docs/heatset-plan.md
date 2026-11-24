@@ -1,440 +1,422 @@
 # Heat-set inserts: plan
 
-Nov 24, 2026 · proposal for review. It extends `docs/SPEC.md`, and nothing in it is built yet.
-Once the decisions below are settled it becomes a "Heat-set inserts" section of the spec, and
-the build follows the milestones at the end.
+Nov 24, 2026 · revision 3: RepRapFirmware first, after your answers and
+`docs/HEATSET_GCODE_SPEC.md`. Nothing here is built yet.
 
 ## Summary
 
-Today the plugin drops square nuts into closed pockets during the print. A heat-set insert
-differs in three ways that reach the code: it is round, it is pressed into a hole smaller than
-itself, and it goes in through an open hole that is never covered. The plan adds a second kind
-of library entry, `heatset`, with its own body measurement, hole measurement, checks,
-insert-layer rule and templates. The nut path stays as it is.
+Two documents drive the heat-set work. `docs/HEATSET_GCODE_SPEC.md`, your spec saved from the Word
+file, defines the tool profile, the insertion routine, the emitted G-code and the firmware commands.
+This plan covers what that spec leaves to the plugin: finding insert bodies and measuring their
+holes, the checks, settings, report, slice gate, export step and pages. It also fills in the
+RepRapFirmware side, which the spec only outlines and which now comes first. And it records where
+the spec disagrees with your answers, with the nut plugin as built, or with a real Orca export.
 
-Most of the plugin carries over unchanged: the snapshot and adapter, the ray caster and its
-robust-distance rule, the report, notifications, the slice gate, the G-code parser, local layers, the print-order and
-not-on-plate checks, insertion points, blocks, the summary and the repeat-run guard. No new
-`orca` call is needed, and nothing changes about threads, files or the event budget.
+What changed since revision 1:
 
-## How an insert differs from a nut
+- **RepRapFirmware first, Klipper later.** The printer tests run on RRF. The spec's Klipper templates,
+  golden file and macros move to the last milestone.
+- The routine is written out step by step from a tool profile, not one `INSERT_HEATSET` call.
+- The insert size belongs to the tool profile (one size per tool), not to the nut library.
+- The press always ends flush with the probed surface, so the sink range is gone.
+- Hole size, depth and wall limits come from the profile, and failing them refuses the export.
+- Blocks are placed outside the slicer's object labels (finding 1).
 
-| | Square nut (built) | Heat-set insert (planned) |
+## Settled
+
+| Topic | Decision | Source |
 | --- | --- | --- |
-| Body | Box: across flats × across flats × thickness | Cylinder: outer diameter × length, often knurled |
-| Hole | Larger than the nut: a gap on every side | Smaller than the insert: the knurls melt into the wall |
-| Goes in by | Dropping onto its seat | A hot tip pressing it to a set depth |
-| Height | From the seat it settles on | From the modelled body, snapped to the printed rim |
-| X and Y | Centred between the pocket walls | Centre of the hole, from a circle fit |
-| Orientation | Flat, on edge or on a corner | Axis vertical, hole opening upward: the tool can only press down |
-| Angle about its axis | Yaw of the flats | None: an insert is round |
-| Inserted | After the last layer below the roof, then covered | After the layer that completes the hole's rim, never covered |
-| Values for the macro | Position, class, yaw, feeder | Position, top and bottom, rim, length, feeder, temperature |
+| Firmware | RepRapFirmware first. Klipper follows the same routine later | Your answer, 24 Nov. The spec said Klipper first |
+| Body name | `HEATSET_<key>`, where key is the profile's `insert_key`, for example `HEATSET_M3x5.7` | Your answer, 24 Nov. The spec said `HSI_<key>` |
+| Insert height | `z_top` is the top of the modelled body, snapped to the top of the layer that prints it. To be checked later against the hole's rim | Your answer, 24 Nov |
+| When | `after_layer` by default: right after the layer that prints `z_top`. `end_of_print` stays available | Your answer, 24 Nov. The spec's default was `end_of_print` |
+| Temperature | From the G-code: the print tool's target temperature plus an offset. A profile value overrides | Your answer, 24 Nov |
+| Insert size | One per tool, in the tool profile | Spec |
+| Routine | The spec's eleven steps, header, preheat, blocks, rehearse mode | Spec |
+| Where code goes | `heatsetcore` beside `nutcore`; Orca glue in `nut_inserter`; RRF macros under `macros/heatset/` | Spec |
+| Grouping | One block per insertion point, nearest-neighbour order. A nut block due at the same point goes first | Spec, and revision 1 |
 
-## Decisions for you
+## RepRapFirmware design
 
-Each has a recommendation, and the rest of the plan assumes it.
+The spec gives RRF one paragraph: macro files with the same command names, called with
+`M98 P"heatset/<name>.g"`, letters that avoid G, M, N, T and P, `G38.2 K<probe>` for a bounded probe
+and `G38.3` to push A. This section fills that in from the Duet3D G-code dictionary and meta-command
+reference, read on 24 Nov.
 
-| | Question | Recommended | Alternatives |
-| --- | --- | --- | --- |
-| D1 | How does the library tell an insert from a nut? | A new entry field `kind`, `nut` or `heatset`. Settings move to schema 2, and a saved schema-1 library is migrated, never replaced | Reuse `shape` with a value `heatset`: no new field, but it mixes the body's shape with the process |
-| D2 | What do you name an insert body in CAD? | `HEATSET_<key>`, and `NUT_<key>` keeps working for every key. The marker is cosmetic: the entry's kind decides the process | `NUT_` only (`NUT_M3HS`): no naming change. Not `INSERT_`: ordinary bodies such as `Insert_Plate` would match, fail as `E_NAME_UNKNOWN` and block the slice |
-| D3 | Where does the insert's height come from? | The body: model it in CAD where the insert should end up. X and Y still come from the hole | Always flush with the rim, whatever the body says |
-| D4 | When is it pressed? | Right after the layer that completes the hole's rim. Nothing above that layer exists yet, so the hot tool cannot hit taller features | After the last layer: one tool visit for all inserts, but taller features nearby can block the tool. Could become a setting later |
-| D5 | Press temperature | The print tool's own `M104`/`M109` target in the file plus a per-type offset (+15 °C by default), passed as `{press_temp}`. Prusa's guidance is the print temperature plus 10–20 °C. A macro may ignore it | A fixed temperature per type, which is wrong when one insert goes into PLA and PETG. Or the macro decides alone, which Marlin cannot: its macros take no parameters |
-| D6 | An insert on a side face or the underside | Warning and no insert command: install it by hand (`W_TILTED`, `W_INVERTED`) | An error that blocks the slice |
-| D7 | Nuts and inserts due at the same layer | One block, nut lines first, so each tool is picked up once | One block per kind |
+**What RRF makes simpler:**
 
-## Library
+- **The probe is bounded.** `G38.2 K<probe> Z<limit>` stops at the limit and reports an error if the
+  float never trips. The spec's Klipper guard "PROBE has no travel limit" does not arise.
+- **The push is one line.** G38 accepts any axis, A included. `G38.3 K<probe> A<target>` feeds the
+  follower until the float trips or the target is reached. The resist-and-wait logic loops inside
+  `push.g`, so the G-code carries one line instead of 26 `_HS_PUSH_TICK` lines.
+- **Macros act on what they measure.** RRF meta commands (`if`, `while`, `var`, `global`, `set`,
+  `echo`) run inside a macro, so Klipper's render-before-run and no-loop workarounds are not needed.
+- **No frame trap.** G38 targets are user coordinates, after tool offsets, and the trip height reads
+  straight from `move.axes[2].userPosition`.
 
-Settings schema 2. `library.migrate(config)` upgrades a schema-1 document before validation:
-each entry gains `kind: "nut"`, the template table moves under `templates.nut`, and the default
-heat-set templates are added. `state.read_config` and the command line call it.
+**What it needs:**
 
-The migration is not optional. Today `read_config` treats any config that fails validation as
-unusable and shows the defaults instead, so a schema bump on its own would hide your tuned M3SQ
-ranges, and the next save from the panel would overwrite them.
+- **RepRapFirmware 3.6.0 or later.** `G38.x F` (a probing speed per move) arrived in 3.6.0. Without
+  it, every G38 move runs at the probe's one `M558` speed, but the pad probe (2.0 mm/s), the push
+  (0.5 mm/s) and the press (1.0 mm/s) need three. Macro parameters and variables need 3.3, and
+  `T T{expression}` needs 3.4.
+- **Abort becomes a pause.** RRF's `abort` ends the whole print, so the spec's abort (stay in place,
+  throat to standby, pause with a message) is `M568 P<tool> A1`, `M291` and `M226`.
+- **Preheat without selecting the tool:** `M568 P<tool> S<temp> A2` heats the heat-set tool to its
+  active temperature while the print tool keeps printing.
+- **Tool save and restore:** `begin.g` stores `state.currentTool` in a global, and `end.g` selects it
+  again with `T T{global.hs_prev_tool}`.
+- **The count persists** through `echo >"heatset/count.g" ...`, run from `config.g` at start-up. RRF
+  has no `SAVE_VARIABLE`.
+- **Skipping a cancelled object.** RRF reads object labels from M486 commands or from the slicer's
+  `; printing object` comments. `insert_start.g` checks the object's entry in `job.build.objects`.
+  Whether the name or the index is the reliable key is to be confirmed with `M486`, which lists the
+  objects, on the printer.
+- **Hard limits** live in `/sys/heatset/limits.g` as globals, never in G-code, with the spec's
+  values: 290 °C, 8 mm per push, 2 mm per unsheath, 10 s waits, 5 mm/s probe and press speeds.
+- **Where the files go:** `macros/heatset/*.g` in the repository, installed to `/sys/heatset/` on the
+  printer, because `M98` resolves a relative name against `/sys`.
 
-A heat-set entry:
+**Emitted lines.** Each spec command becomes one `M98` call. RRF hands each extra letter to the
+macro as `param.<letter>`. The letters avoid G, M, N, T and P, as the spec asks. They also avoid R,
+which `M98` uses itself, and A, the follower axis. Speeds keep the spec's mm/s with one decimal,
+under V, so they cannot be mistaken for RRF's F in mm/min. `G0` lines stay as they are. Proposed:
 
-| Field | Example for `M3HS` | Meaning |
-| --- | --- | --- |
-| Key | `M3HS` | Bodies named `HEATSET_M3HS` (or `NUT_M3HS`) use this entry |
-| Kind | `heatset` | |
-| Diameter | 4.6 mm | Outer diameter over the knurls |
-| Length | 5.7 mm | |
-| Hole diameter | 3.90–4.10 mm | Min–max of the modelled hole |
-| Hole depth | 6.2 mm or more | From the rim to the hole's floor, or to a step down to a screw hole |
-| Wall | 1.6 mm or more | Plastic around the hole; less is a warning |
-| Sink | 0.00–0.30 mm | How far the insert's top sits below the rim. Negative means it stands proud |
-| Press temperature offset | +15 °C | Added to the print temperature |
-| Feeder | 2 | Passed to the macro |
+| Spec command | RRF line |
+| --- | --- |
+| `HEATSET_CONFIG` | `M98 P"heatset/config.g" K"<key>" H<tool> D<p> O<delta> U<surface_tol> W<temp_window> Q"<on_proud>" B"<mode>" L<rehearse_lift>` |
+| `HEATSET_REQUIRE` | `M98 P"heatset/require.g" K"<key>" C<total_inserts> S<temp>` |
+| `HEATSET_PREHEAT` | `M98 P"heatset/preheat.g" S<temp>` |
+| `HEATSET_BEGIN` | `M98 P"heatset/begin.g" K"<key>" S<temp> Z<z_safe> C<n>` |
+| `HEATSET_INSERT_START` | `M98 P"heatset/insert_start.g" I<i> O"<object>" X<x> Y<y> Z<z_top>` |
+| `HEATSET_PROBE` | `M98 P"heatset/probe.g" V<probe_speed>` |
+| `HEATSET_Z` | `M98 P"heatset/z.g" H<height> V<speed>` |
+| `_HS_PUSH_START`, the ticks, `_HS_PUSH_END` | `M98 P"heatset/push.g" D<push> V<push_speed> W<resist_wait> C<resist_retries>` |
+| `HEATSET_UNSHEATH` | `M98 P"heatset/unsheath.g" D<L> V<unsheath_speed>`, only when L > 0 |
+| `HEATSET_RETRACT` | `M98 P"heatset/retract.g" D<r> V<retract_speed>` |
+| `HEATSET_PRESS` | `M98 P"heatset/press.g" V<press_speed> W<press_dwell> U<flush_tol> L<press_guard>` |
+| `HEATSET_INSERT_DONE` | `M98 P"heatset/insert_done.g"` |
+| `HEATSET_END` | `M98 P"heatset/end.g"` |
 
-The sizes are those of a ruthex RX-M3x5.7: 4.6 mm outer diameter, 4.0 mm hole, 1.6 mm minimum
-wall. The ranges, the depth (length plus 0.5 mm for displaced plastic) and the offset are
-placeholders, like every number in the nut library. Replace them from test prints.
+The emitter doubles any `"` inside a string value, as RRF requires. The spec's worked example in this
+form, proposed as the RRF golden file (same inputs: defaults with every TBD placeholder, PETG at
+245 °C, tool 3, one insert on `bracket_1` at X 120, Y 80, `z_top` 12.4, `end_of_print`):
+
+```gcode
+; HEATSET block 1: end_of_print, inserts=1, key M3x5.7
+M98 P"heatset/begin.g" K"M3x5.7" S245 Z17.400 C1
+; insert 1/1 bracket_1 X120.000 Y80.000 Ztop12.400
+M98 P"heatset/insert_start.g" I1 O"bracket_1" X120.000 Y80.000 Z12.400
+G90
+G0 Z17.400 F600
+G0 X100.000 Y80.000 F9000
+G0 Z14.800 F300
+M98 P"heatset/probe.g" V2.0
+M98 P"heatset/z.g" H3.000 V5.0
+G0 X120.000 Y80.000 F1800
+M98 P"heatset/z.g" H0.800 V5.0
+M98 P"heatset/push.g" D5.400 V0.5 W2.0 C3
+M98 P"heatset/unsheath.g" D0.300 V1.0
+M98 P"heatset/retract.g" D0.300 V2.0
+M98 P"heatset/z.g" H2.600 V5.0
+G0 X100.000 Y80.000 F1800
+M98 P"heatset/press.g" V1.0 W3.0 U0.100 L0.300
+M98 P"heatset/z.g" H3.000 V5.0
+M98 P"heatset/insert_done.g"
+M98 P"heatset/end.g"
+```
+
+The header becomes `M98 P"heatset/config.g" K"M3x5.7" H3 D0.400 O0.000 U0.500 W5 Q"warn"
+B"normal" L10.000` and `M98 P"heatset/require.g" K"M3x5.7" C1 S245`. Every number traces to the
+profile, the model or a formula, as the spec requires. `push_step`, the tick count and rule 4 only
+matter for Klipper.
+
+## Found in a real Orca export
+
+`tests/data/sample.gcode` was exported from OrcaSlicer 2.5.0 with the Klipper flavor. An export with
+your RRF printer profile is needed to confirm each point for RRF (milestone 0).
+
+1. **Blocks would run inside an object label.** Orca ends a layer like this: the last extrusion,
+   `; stop printing object ...`, `;LAYER_CHANGE`, then the retract, the wipe and, for Klipper,
+   `EXCLUDE_OBJECT_END`. Both firmwares skip the moves of a cancelled object while it is current.
+   RRF's M486 "ignores G0-G3 moves in XYZ"; Klipper's exclude_object ignores every move, macro
+   moves included. The nut export as built writes its block right after the last extrusion, which
+   is inside the object in both firmwares. The spec's "before the next `;LAYER_CHANGE`" is inside
+   the Klipper label. If that object is cancelled mid-print, the routine's moves are dropped while
+   its macros still run. `insert_start.g`'s skip only covers the insert's own object.
+
+   **Proposal:** place every block after the retract and wipe that follow the layer's last
+   extrusion, and after any label that ends an object (`; stop printing object`, `M486 S-1`,
+   `EXCLUDE_OBJECT_END`). Place it before the first move that changes Z or extrudes, and before any
+   label that starts an object. The print tool has then retracted and wiped, and no object is
+   current. `end_of_print` uses the same rule, which lands before the end G-code. This is
+   recommended for nut blocks too. It changes the `insert_nut.g` contract from "not retracted" to
+   "retracted and wiped", so that part is your call.
+2. **Preheat can use the slicer's time estimate.** The sample has 134 lines of
+   `M73 P<percent> R<minutes left>`, and RRF supports `M73 R`. `preheat.g` goes at the last `M73`
+   line whose R exceeds the R at the block by at least `preheat_lead`, rounded up to whole minutes.
+   This settles the spec's "to confirm where the export step can read them". `preheat_layers` stays
+   the fallback.
+3. **Object names are in the file:** Klipper's `EXCLUDE_OBJECT_DEFINE NAME=... POLYGON=[...]`, and
+   the label comments that RRF reads. `O"<object>"` comes from the label of the object whose
+   outline contains the insert's X, Y.
+4. **The header can be placed without relying on comments:** before the first object label, after
+   the start G-code. Without labels, before the first move that changes Z.
+5. **The print temperature is in the file** as `M109 S220` and in `PRINT_START EXTRUDER=220`. An RRF
+   export may set it with `G10 P<tool> S<temp>` or `M568` instead. The parser reads all four
+   (`M104`, `M109`, `G10`, `M568`) per tool. Where none appears, the spec's filament table is the
+   fallback, using `filament_type` through `ctx.config_value`. That key is in the sample's config
+   block.
+
+## Still open
+
+1. **RRF version:** which RepRapFirmware version does the printer run, and is it standalone or
+   with a single-board computer? The design needs 3.6.0 or later.
+2. **The RRF letters and file names** in the table above: approve, or change?
+3. **Block placement** as in finding 1, for heat-set blocks. And for nut blocks?
+4. **Orientation.** An insert whose axis is not vertical with the open end up: a warning and no
+   insert (your integration plan), or an export refusal (the spec's rule 7)? Proposal: a warning
+   when the body's orientation is wrong; a refusal when a vertical hole's surrounding surface is
+   not flat, because the pad cannot probe or press there.
+5. **Magazine capacity.** Rule 9 needs a number. Add `magazine_capacity` to the profile, marked TBD?
+6. **Hold-down rule.** Proposal: two TBD profile values, a minimum bed contact area in mm² and a
+   maximum of height ÷ √area. Warn when a part fails either.
+7. **Temperature order:** the profile value; else the print temperature plus `insert_temp_offset`
+   (new, default +15 °C); else your filament table. Is that right?
+8. **Insert errors and `on_error`:** does `on_error: skip` apply to inserts (leave the insert out
+   and name it in a comment), or does any insert error refuse the export, as the spec says?
+
+## Architecture
+
+```
+Orca model --(nut_inserter.adapter)--> ModelSnapshot, now with object names
+ModelSnapshot + settings --(nutcore.pipeline.detect)--> nut records
+ModelSnapshot + settings --(heatsetcore.detect)-------> insert records
+    both go into one Report; each record carries kind "nut" or "heatset"
+Report --> panel, Nuts tab, slice gate, export step
+export: G-code --(nutcore.gcode.inject)--> nut blocks --(heatsetcore)--> header, preheat, blocks
+```
+
+| Module | Job |
+| --- | --- |
+| `heatsetcore/profile.py` | Profile schema, defaults, the TBD list, rules 1–6 and 9, derived values |
+| `heatsetcore/routine.py` | Routine math: L, push, ticks, the heights table |
+| `heatsetcore/insert.py` | Find `HEATSET_` bodies; insert frame (normals binned by area) and class |
+| `heatsetcore/hole.py` | Hole axis and diameter, rim, bottom, depth, wall, surface |
+| `heatsetcore/checks.py` | Rule 7 per insert as findings; the hold-down warning |
+| `heatsetcore/place.py` | Header, preheat and block positions, `z_safe`, object names, keep-out (rule 8), the empty-hole proof |
+| `heatsetcore/emit.py` | One template set per firmware: RepRapFirmware now, Klipper later |
+| `nutcore` | Shared: naming (a second marker), mesh, rays, the G-code parser (temperatures per tool), the report (`kind`) |
+| `nut_inserter` | Settings schema 2 and migration, a check that runs both, the gate, export composition, panel, tab |
+
+`heatsetcore` follows the `nutcore` rules: plain Python and numpy, no `orca` import, tests that run
+without Orca. Nothing new is imported while Orca loads the plugin module. No new `orca` call is
+needed beyond `object.name`, which the probe found.
+
+## Settings
+
+Schema 2 adds a `heatset` section beside `settings` and `nuts`:
 
 ```json
-{
-  "key": "M3HS",
-  "label": "M3 heat-set insert, 5.7 mm",
-  "kind": "heatset",
-  "diameter": 4.6,
-  "length": 5.7,
-  "feeder": 2,
-  "hole": {"diameter": [3.9, 4.1], "depth_min": 6.2, "wall_min": 1.6},
-  "sink": [0.0, 0.3],
-  "press_temp_offset": 15
+"heatset": {
+  "profiles": [{
+    "name": "Concept D",
+    "firmware": "reprapfirmware",
+    "insert_key": "M3x5.7", "insert_length": 5.7, "insert_od": 4.6,
+    "rest_recess": 0.0, "pad_dx": 20.0, "pad_dy": 0.0, "pad_drop": 0.4,
+    "insert_temp": null, "insert_temp_offset": 15,
+    "tbd": ["rest_recess", "pad_dx", "pad_dy", "pad_drop", "block_r", "block_clearance",
+            "trip_overtravel", "float_travel", "trip_force", "tool"]
+  }]
 }
 ```
 
-Validation follows the existing rules, except that `sink` may start at zero or below, so it
-needs its own range check: `_check_range` rejects sizes that are not positive.
+The example shows a few of the spec's variables; the profile holds all of them. Its `firmware`
+defaults to `reprapfirmware` rather than the spec's `klipper`, spelled as the nut settings spell it
+rather than the spec's `rrf`.
 
-The templates become one table per kind:
-
-```json
-"templates": {
-  "nut": {"klipper": "INSERT_NUT KEY={key} CLASS={cls} ...", "reprapfirmware": "...", "marlin": ""},
-  "heatset": {
-    "klipper": "INSERT_HEATSET KEY={key} X={x} Y={y} Z_TOP={z_high} Z_LOW={z_low} RIM={rim_z} LENGTH={length} TEMP={press_temp} FEEDER={feeder} TOOL={tool}",
-    "reprapfirmware": "M98 P\"insert_heatset.g\" K\"{key}\" X{x} Y{y} Z{z_high} L{z_low} R{rim_z} H{length} B{press_temp} F{feeder} S{tool}",
-    "marlin": ""
-  }
-}
-```
-
-The RepRapFirmware letters avoid G, M, N, T and P, as the nut template does.
-
-## Name matching
-
-`naming._PREFIX` accepts `HEATSET_` as well as `NUT_`, with the same boundaries. Both look up
-the same library, and the longest key still wins. `HEATSET_M3HS`, `HEATSET_M3HS:1` and
-`Bracket/heatset_m3hs (2)` match `M3HS`; `PREHEATSET_M3HS` does not. A marked body still leaves
-the host, so it is never measured as a wall.
+- A body named `HEATSET_<key>` uses the profile whose `insert_key` is `<key>`. No such profile is
+  `E_NAME_UNKNOWN`, as for nuts. Profile keys may contain a dot (`M3x5.7`); nut keys may not.
+- Every variable holds a number. `tbd` lists the ones not yet measured, which hold the spec's
+  placeholders. Entering a value in the panel takes it off the list. In normal mode, inserts in
+  the model with anything on the list fail the slice gate, naming the variables. Rehearse mode runs.
+- `insert_temp: null` means take it from the G-code. `insert_temp_offset` is new: it puts the
+  spec's "print temperature + 10–20 °C" into a number.
+- Migrating schema 1 to 2 adds the default profile and changes nothing else. `state.read_config`
+  runs it. Today a schema mismatch makes `read_config` fall back to the defaults, and the next save
+  from the panel would overwrite your tuned nut ranges.
 
 ## Detection
 
-The pipeline branches on the entry's kind in `pipeline._detect_nut`, and the nut path is
-untouched. For a heat-set entry:
+For each `HEATSET_` body, per copy on the plate:
 
-1. **Insert frame.** Bin the body's triangle normals by direction, folding each direction
-   together with its opposite, and sum the areas per bin. The end caps are flat, so their pair
-   normally has the largest total. Try directions in that order, and accept the first along
-   which the body extends the library length and around which its largest radius is half the
-   library diameter, each within `BODY_TOL`. The knurl tips set a detailed model's largest
-   radius. The axis line runs through the area-weighted centre of the cap triangles. No match
-   is `E_BODY_SIZE`.
-2. **Class.** `tilt = acos(|a_z|)`. Beyond `AXIS_TOL` from vertical the insert is `TILTED`.
-   There is no yaw.
-3. **Hole wall.** From five points along the body's axis, cast 16 rays outward from each. Fit a
-   circle to the hits by least squares: its centre is the hole's axis and its diameter the hole
-   diameter. Cast once more from the fitted centre. A direction with no wall is `E_NO_POCKET`,
-   naming the side. The insert is larger than its hole by design, so the sides get no
-   interference check.
-4. **Open end.** Cast rays straight up from a disc inside the hole, starting at the insert's top.
-   All clear: `UPRIGHT`. Otherwise cast straight down from its bottom: all clear means the hole
-   opens downward, `INVERTED`. Blocked both ways, wholly or in part (a ledge over the hole, a
-   closed cavity), is `E_DROP_PATH`.
-
-For an upright insert:
-
-5. **Rim.** Walk up from the middle of the insert with radial rays, as `pocket._rim` does. A
-   wall counts while it is within the hole radius plus `RIM_FLARE`, so an entry chamfer still
-   belongs to the hole and a neighbouring wall does not. Starting from the middle, not the top,
-   keeps the walk inside the hole when the insert is modelled proud (as DECISIONS.md #7 does for
-   nuts).
-6. **Bottom.** Walk down from the middle of the insert the same way. The hole ends where the
-   wall leaves the hole radius ± `HOLE_TOL`: at a floor, at a step to a narrower screw hole, or
-   at the underside of a through hole. Depth is rim minus bottom. A body that reaches below the
-   bottom is `E_INTERFERENCE`.
-7. **Wall.** From each wall hit cast on outward; the distance to the next surface is the wall
-   there. The smallest one is reported.
-8. **Placement.** X and Y are the hole centre. Z comes from the body: `z_high` is its top,
-   `z_low = z_high − length`, and the placement point is midway. `sink = rim_z − z_high`. When
-   the body's axis is more than `OFF_CENTRE` from the hole's, `N_OFF_CENTRE`.
-
-| Constant | Default | Used for |
-| --- | --- | --- |
-| `HOLE_RAYS` | 16 | Radial rays per height |
-| `HOLE_HEIGHTS` | 5 | Heights along the insert |
-| `RIM_FLARE` | 1.0 mm | How far a chamfer may widen the hole and still count as the hole |
-| `HOLE_TOL` | 0.2 mm | Change of radius that ends the hole going down |
+1. **Insert frame.** Bin the body's triangle normals by direction, folding each direction together
+   with its opposite, and sum the areas per bin. The end caps are flat, so their pair normally has
+   the largest total. Accept the first direction along which the body measures `insert_length` and
+   around which its largest radius is half of `insert_od`, each within `body_tolerance_mm`. No match
+   is `E_BODY_SIZE`. The axis line runs through the area-weighted centre of the cap triangles.
+2. **Class.** `UPRIGHT` when the axis is within `axis_tolerance_deg` of vertical and the hole opens
+   upward at its rim. `INVERTED` when the hole's top end is a ceiling and it opens downward. `TILTED`
+   otherwise. How the last two are reported is open question 4.
+3. **Hole axis and diameter.** From five points along the body's axis, cast 16 rays outward from
+   each. Fit a circle to the hits by least squares, then cast again from the fitted centre. The
+   centre is the hole axis and gives X and Y; a body modelled off-centre is placed in the hole's
+   centre, with `N_OFF_CENTRE`. A direction with no wall is `E_NO_POCKET`.
+4. **Rim and bottom.** Walk up and down from the middle of the insert with radial rays, as
+   `pocket._rim` does. Going up, a wall counts while it lies within the hole radius plus 1.0 mm, so
+   an entry chamfer belongs to the hole and a neighbouring wall does not. Going down, the hole ends
+   where its radius changes by more than 0.2 mm: a floor, a step to a screw hole, or the underside
+   of a through hole.
+5. **Wall.** From each wall hit, cast on outward; the distance to the next surface is the wall
+   there. The smallest one is checked.
+6. **Surface.** Cast down onto a ring around the hole at the rim; the fitted plane must face +Z
+   within 0.5°.
+7. **Height.** `z_top` is the body's top. The rim is recorded beside it for the later check.
+8. **Covered later.** Something modelled over the hole, with a gap above the rim, does not stop an
+   `after_layer` insert, which your integration plan allows. It gets `N_COVERED`; with
+   `end_of_print` the keep-out rule refuses it.
 
 **Why not `flat_faces`.** A nut's frame comes from `flat_faces`, which seeds each direction from
-the largest remaining triangle and stops after 40 directions (DECISIONS.md #31). A cylinder's
-side triangles are larger than its cap triangles, so the 40 seeds all land on the side and the
-caps are never grouped. A scratch prototype run against `nutcore` on 24 Nov showed this:
-`flat_faces` returned a side facet, 90° off, for every test body. Binning by area found the axis
-to within 0.001° on plain, bored, knurled, short and long bodies, each tilted, in 0.6–3 ms. An
-area-weighted normal tensor also works, except when the length equals the diameter, where its
-three eigenvalues coincide. `faces.py` and the nut path stay as they are.
+the largest remaining triangle and stops after 40 directions (DECISIONS.md #31). A cylinder's side
+triangles are larger than its cap triangles, so the caps are never grouped. A scratch prototype on
+24 Nov confirmed it: `flat_faces` returned a side facet, 90° off, for every test body. Binning by
+area found the axis within 0.001° on plain, bored, knurled, short and long bodies, each tilted, in
+0.6–3 ms. An area-weighted normal tensor also works, except when the length equals the diameter.
 
-**Accuracy.** The spec relies on flat faces tessellating exactly and says no placement number
-depends on a curved face. For inserts the hole diameter and centre do. A faceted hole's wall lies
-between the true radius and the true radius less the STEP import's linear deflection, so the
-measured diameter comes out low by up to twice that deflection. The prototype measured 1.4–1.8
-times: 13 µm for a 32-facet Ø4 hole, under 4 µm at 64 facets, well inside a 0.2 mm range. The
-centre came out exact. The README should ask for a fine deflection on import, and
-`docs/DECISIONS.md` should record the change.
-
-**Time.** In the prototype, the axis and a two-pass hole fit took under 10 ms together. The rim
-and bottom walks take coarse steps and then bisect, as `_rim` does. A timing test keeps an
-insert check under the 100 ms event budget, as `test_nut_body_with_a_round_hole_and_many_facets`
-does for nuts.
+**Accuracy and time.** The spec relies on flat faces tessellating exactly; the hole diameter is a
+curved face. A faceted hole measures low by up to twice the STEP import's linear deflection. The
+prototype measured 13 µm on a 32-facet Ø4 hole and under 4 µm at 64 facets, with the centre exact.
+The axis and a two-pass hole fit took under 10 ms together, well inside the 100 ms event budget.
 
 ## Checks
 
-| Check | Fails when | Level | Code |
+| Rule | Fails when | Level | Code |
 | --- | --- | --- | --- |
-| Body size | Diameter or length differs from the library by more than `BODY_TOL` | Error | `E_BODY_SIZE` |
-| Hole diameter | Outside the allowed range | Error | `E_HOLE_DIAMETER` (new) |
-| Hole depth | Rim to bottom less than the minimum | Error | `E_DEPTH` |
-| Sink | Insert top outside the allowed range below the rim; negative means proud | Error | `E_SINK` (new) |
-| Open side | A direction with no wall | Error | `E_NO_POCKET` |
-| Covered | Anything over the hole, unless it opens downward | Error | `E_DROP_PATH` |
-| Too deep | The body reaches below the hole's bottom | Error | `E_INTERFERENCE` |
-| Still printing | The body is a printing part | Error | `E_NOT_MODIFIER` |
-| Tilted | Axis not vertical: install by hand | Warning | `W_TILTED` |
-| Upside down | The hole opens downward: install by hand | Warning | `W_INVERTED` (new) |
-| Thin wall | Wall below the minimum | Warning | `W_WALL_THIN` (new) |
-| Off-centre | Body axis more than 0.1 mm from the hole's axis | Note | `N_OFF_CENTRE` |
+| 7, diameter | Hole outside `hole_d_min`–`hole_d_max` | Error | `E_HOLE_DIAMETER` (new) |
+| 7, depth | Blind hole shallower than `insert_length + hole_extra_depth` | Error | `E_DEPTH` |
+| 7, wall | Wall thinner than `min_wall` | Error | `E_WALL` (new) |
+| 7, surface | Surface around the hole not facing +Z within 0.5° | Error | `E_SURFACE` (new) |
+| 7, orientation | Axis not vertical, or the hole opens downward | Open question 4 | `W_TILTED`, `W_INVERTED` (new) |
+| 7, empty hole | Plastic printed in the hole (export) | Error | `E_POCKET_NOT_EMPTY` |
+| 8, keep-out | Something printed in a tool footprint before the block (export) | Error | `E_KEEP_OUT` (new), naming the blocked side |
+| 9, magazine | More inserts in the print than the magazine holds | Error | `E_MAGAZINE` (new) |
+| 1–6, profile | A profile rule broken, or a TBD left in normal mode | Error, at the slice gate | `E_PROFILE` (new), naming the rule |
+| Hold-down | A small or tall part under `trip_force` | Warning | `W_HOLD_DOWN` (new) |
+| Body | Wrong size, still a printing part, unknown key | Error | `E_BODY_SIZE`, `E_NOT_MODIFIER`, `E_NAME_UNKNOWN` |
+| Off-centre | Body axis more than 0.1 mm from the hole axis | Note | `N_OFF_CENTRE` |
+| Covered later | Printed over after it goes in (`after_layer`) | Note | `N_COVERED` (new) |
 
-Messages keep the existing form, which `checker.range_finding` already writes: "HEATSET_M3HS #2:
-hole diameter 4.30 mm, allowed 3.90–4.10 mm. Reduce by 0.20–0.40 mm in CAD and re-export."
-
-## Report
-
-Report schema 2. Every record gains `kind`. For an insert, `cls` is `UPRIGHT`, `INVERTED` or
-`TILTED`; `yaw_deg` and `roof_z` are null; `rim_z` is the hole's rim; `pocket` holds `diameter`,
-`depth`, `wall`, `sink` and `bottom_z`; `box` is the hole as an oriented box, which the preview
-draws as a cylinder; and `window` is `[rim_z, null]`. `Report.from_dict` reads a schema-1 report
-as all nuts, so an old `report.json` still works with the `inject` command. The CSV gains `kind`,
-`hole_diameter`, `wall` and `sink` columns.
+Keep-out only matters for `end_of_print`. When printing by layer, nothing above `z_top` exists yet
+at an `after_layer` block.
 
 ## Export
 
-`gcode/proof.py` gains `plan_insert` beside `plan_pocket`:
-
-1. **Footprint.** A circle: the hole's centre and radius. Local layers are the extrusion within
-   `PROOF_RING` of it. The proof needs a new `crosses_circle`, the distance from the centre to
-   each segment. The rectangle test cannot be reused: a square of half-width `r − PROOF_INSET`
-   has its corners outside the hole, where the hole's own perimeter runs, so every hole would
-   fail.
-2. **Open layers** are those whose middle lies between the hole's bottom and its rim, proved
-   empty as for nuts. In addition, nothing may cross the circle in any layer above the rim:
-   support or another part over the hole would be printed onto the insert. Both are
-   `E_POCKET_NOT_EMPTY`, with a message for each.
-3. **Snap.** The printed rim is the top of the last open layer. `z_high` is the printed rim less
-   the modelled sink, and `z_low = z_high − length`. `E_PRINTED_DEPTH` when the printed hole is
-   shallower than the minimum.
-4. **Insert layer.** The last open layer: the one that completes the rim. The insertion point,
-   the print-order checks, `N_NOT_ON_PLATE` and `on_error` work as they do for nuts.
-5. **Temperature.** The parser remembers each tool's last `M104`/`M109` `S` target, for the tool
-   in the `T` word when there is one, else the active tool. `{print_temp}` is the active print
-   tool's target at the insertion point, and `{press_temp}` adds the entry's offset. Both are −1
-   when the file sets no temperature, as when temperatures go to a start macro. The sample export
-   has `M109 S220`.
-6. **Blocks.** Nuts and inserts due at the same point share one block, nut lines first. Summary
-   lines name the insert: `; nut 3 HEATSET_M3HS UPRIGHT X... Y... Z_TOP... after layer_z=...`.
-
-Optionally, the export step reads `xy_hole_compensation` and `hole_to_polyhole` through the
-existing `ctx.config_value` and writes them in the summary. Both keys appear in the config block
-of the sample export and both change the printed hole, so a hole that prints the wrong size can
-be traced to its preset.
-
-## Templates and the macro
-
-New placeholders for heat-set templates:
-
-| Placeholder | Value |
-| --- | --- |
-| `{kind}` | `heatset` |
-| `{cls}` | `UPRIGHT` |
-| `{z_high}` | Insert top when pressed home, as printed: the printed rim less the sink |
-| `{z_low}` | Insert bottom: `z_high` less the length |
-| `{z}` | Midway between them |
-| `{rim_z}` | The hole's rim, as printed |
-| `{length}` `{diameter}` | From the library |
-| `{print_temp}` | The active print tool's last `M104`/`M109` target, or −1 |
-| `{press_temp}` | `{print_temp}` plus the entry's offset, or −1 |
-
-Shared with nuts and unchanged: `{index}` `{key}` `{x}` `{y}` `{feeder}` `{layer_z}` `{tool}`
-`{rx}` `{ry}` `{rz}`. A template is checked against its own kind's list when the settings are
-saved and again at export, so `{yaw}` in a heat-set template is `E_TEMPLATE`.
-
-What the macro must do: the same contract as `INSERT_NUT` (the print tool arrives hot and not
-retracted, and goes back to the same place, primed, with modes unchanged), and for the insert:
-
-- heat the tip to `TEMP`, or to the print tool's target plus an offset when `TEMP` is −1;
-- pick an insert from `FEEDER` and move above `X`, `Y`;
-- lower until the insert meets the rim, with the tip at about `RIM + LENGTH`;
-- press slowly about 90 % of the way, finish to `Z_TOP`, and lift clear without pulling the
-  insert back up. CNC Kitchen recommends melting about 90 % of the way and pushing the rest.
-
-Add `macros/klipper/insert_heatset_dry_run.cfg`, which follows the nut dry run: check the values,
-report them, pause. A test keeps it in step with the Klipper template, as one already does for
-`INSERT_NUT`.
+1. The nut injection runs first, as built. `heatsetcore` then works on its output.
+2. Lines go where findings 1 to 4 say. The insert layer is the local layer whose top is the snapped
+   `z_top`.
+3. The empty-hole proof uses a circle, `crosses_circle`. The nut proof's rectangle cannot be reused:
+   a square of half-width `r − PROOF_INSET` has its corners outside the hole, where the hole's own
+   perimeter runs.
+4. `z_safe`, nearest-neighbour order and number formats follow the spec. The firmware's template set
+   is chosen from the profile's `firmware`.
+5. A file that already has the `; HEATSET profile` header is left alone, as `;NUT_INSERT_BEGIN`
+   is for nuts. Orca may run the step twice.
+6. In rehearse mode only the mode value changes in the output.
 
 ## Panel and Nuts tab
 
-- **Panel.** A Kind column in the library table; Add nut and Add insert buttons; the entry form
-  shows its kind's fields (`NUT_FIELDS` or a new `HEATSET_FIELDS`); templates in two groups, each
-  with its placeholder list; the macro contract for both; the Modifier reminder names insert
-  bodies too.
-- **Nuts tab.** An insert's hole is drawn as a cylinder (two circles and four lines) with the
-  same crosshair and axis arrow. List rows read "UPRIGHT, hole Ø4.02" instead of a yaw, and the
-  detail shows diameter, depth, wall and sink.
-
-## What changes, file by file
-
-| File | Change |
-| --- | --- |
-| `src/nutcore/library.py` | Schema 2, `migrate`, `kind`, an `InsertType`, validation per kind, the default M3HS entry, templates per kind |
-| `src/nutcore/naming.py` | The `HEATSET_` marker |
-| `src/nutcore/insert.py` (new) | Insert frame (normals binned by area) and class |
-| `src/nutcore/hole.py` (new) | Hole wall, open end, rim, bottom, wall, placement |
-| `src/nutcore/checker.py` | `check_insert` |
-| `src/nutcore/pipeline.py` | `_detect_nut` branches on kind |
-| `src/nutcore/report.py` | `kind`, schema 2, reading schema 1, CSV columns |
-| `src/nutcore/gcode/parser.py` | Temperature per tool |
-| `src/nutcore/gcode/proof.py` | `crosses_circle`, `plan_insert` |
-| `src/nutcore/gcode/templates.py` | Placeholder lists per kind |
-| `src/nutcore/gcode/inject.py` | Template per kind, insert values, block order |
-| `src/nutcore/cli.py` | Migrate a `--config` file on load |
-| `src/nut_inserter/state.py` | Migrate in `read_config` |
-| `src/nut_inserter/ui_panel.py`, `ui_preview.py` | As above |
-| `macros/klipper/insert_heatset_dry_run.cfg` (new) | Dry-run macro |
-| `tests/builders.py` | `cylinder`, `insert`, `hole_block`, `gcode_hole` |
-| `docs/` | Spec section, DECISIONS, README, manual-test |
-
-Unchanged: `adapter.py`, `__init__.py`, `permissions.py`, `mesh.py`, `faces.py`, `rays.py` and
-`frame.py`; `pocket.py` too, unless `hole.py` shares its rim walk. Six lines of the existing tests
-name the template path or a schema number and change with schema 2; nothing else in the 91
-tests should.
+- **Panel:** a Heat-set tool section. It shows the profile in the spec's four groups, with TBD
+  badges, the derived values read-only, a normal/rehearse switch, and validation messages that name
+  the rule.
+- **Nuts tab:** insert points with both tool footprints, mouth over the hole and pad over the hole,
+  as your integration plan asks.
 
 ## Tests
 
-New builders:
-
-- `cylinder(diameter, length, centre, rot, sides=64)`: a faceted cylinder with end caps.
-- `insert(key="M3HS", centre, rot, sides)`: a cylinder of the library size named
-  `HEATSET_<key>`.
-- `hole_block(hole=4.0, depth=6.7, sides=64, wall=3.0, through=False, step=None, chamfer=None,
-  ledge=None)`: a faceted tube for the hole wall, a floor or step disc, and an outer box. Like
-  `pocket_block`, it need not be watertight.
-- `gcode_hole(...)`: layers of circular perimeters around the hole, solid below the floor, with
-  options for fill inside, something over the hole above the rim, arcs, and `M104`/`M109` lines.
-
-Detection cases, all with the M3HS placeholder entry:
+The spec's own tests stand, with RRF first: each profile rule broken in turn, the routine math, the
+RRF golden file byte for byte, rehearse differing only in the mode value, placement on a real export,
+and the checks. In addition:
 
 | Case | Setup | Expected |
 | --- | --- | --- |
-| H1 | Insert flush in a Ø4.0 × 6.7 blind hole | `UPRIGHT`, ok, placement on the hole axis, `z_high` at the rim |
+| H1 | Insert flush in a Ø4.0 × 6.7 blind hole | `UPRIGHT`, ok, placement on the hole axis, `z_top` at the body's top |
 | H2 | H1, object rotated 30° about Z and moved | ok, placement follows the object |
 | H3 | Body 0.15 mm off the hole axis | Placement unchanged, `N_OFF_CENTRE` |
-| H4 | Hole Ø4.3 | `E_HOLE_DIAMETER`; message contains 4.30, 3.90 and 4.10 |
-| H5 | Hole 5.9 deep | `E_DEPTH` |
-| H6 | Insert top 0.2 mm above the rim | `E_SINK` |
-| H7 | Ø4.0 to 7.0 deep, then Ø3.4 through | ok, depth measured to the step |
-| H8 | Through hole | ok |
-| H9 | 0.5 mm entry chamfer, insert flush with the top face | ok, rim at the top face |
-| H10 | Object tilted 20° about X | `W_TILTED`, no placement |
-| H11 | Hole in the underside, opening downward | `W_INVERTED`, no placement |
-| H12 | Wall 1.0 mm | `W_WALL_THIN` |
-| H13 | Ledge over a third of a blind hole | `E_DROP_PATH` |
-| H14 | Instance scaled by 1.02 | `E_BODY_SIZE` |
-| H15 | Mirrored instance; two instances | As H1; two records |
-| H16 | Body deeper than its hole | `E_INTERFERENCE` |
-| H17 | Body still a printing part | `E_NOT_MODIFIER` |
+| H4 | Hole Ø4.3 | `E_HOLE_DIAMETER`; message contains 4.30, 3.90 and 4.20 |
+| H5 | Blind hole 6.5 deep | `E_DEPTH`, 6.70 needed |
+| H6 | Ø4.0 to 7.0 deep, then Ø3.4 through | ok, depth to the step |
+| H7 | Through hole 6.0 deep | ok: the depth rule is for blind holes |
+| H8 | 0.5 mm entry chamfer | ok, rim at the top face |
+| H9 | Object tilted 20° about X | `W_TILTED`, no placement |
+| H10 | Hole in the underside | `W_INVERTED`, no placement |
+| H11 | Wall 1.0 mm | `E_WALL` |
+| H12 | Surface sloped 5° around a vertical hole | `E_SURFACE` |
+| H13 | Instance scaled by 1.02 | `E_BODY_SIZE` |
+| H14 | Mirrored instance; two instances | As H1; two records |
+| H15 | Body still a printing part | `E_NOT_MODIFIER` |
+| H16 | `HEATSET_M4x8` with no such profile | `E_NAME_UNKNOWN` |
+| H17 | A lid over the hole with a gap | ok, `N_COVERED` |
 | H18 | 720-facet knurled body in a 256-facet hole | ok, under 100 ms |
-| H19 | Bodies: plain 64 facets, bored, knurled, length equal to diameter, each tilted | Axis found every time; a guard against using `flat_faces` here |
+| H19 | Plain, bored and knurled bodies, and length equal to diameter, each tilted | Axis found every time |
+| P1 | RRF export, one insert, a nut pocket used as the hole | Header before the first object label; block after the layer's retract, wipe and object-end label |
+| P2 | RRF export, `end_of_print` | Block after the last object-end label, before the end G-code |
+| P3 | RRF export, `preheat_lead` 120 s | `preheat.g` at the last `M73` whose R is at least 2 above the block's |
+| P4 | P3 with the `M73` lines removed | Preheat `preheat_layers` layers earlier |
+| P5 | No object labels | Block after the retract and wipe, before the next layer's first Z move |
+| P6 | RRF export | `O"..."` holds the label of the object around the insert |
+| P7 | Plastic in the hole; then only the hole's own perimeter | `E_POCKET_NOT_EMPTY`; then ok |
+| P8 | `end_of_print`, a taller wall within `block_r` | `E_KEEP_OUT`, naming the side |
+| P9 | Three inserts on one layer | One block, nearest-neighbour order from the last toolhead position |
+| P10 | A nut and an insert due at the same point | Nut block, then heat-set block |
+| P11 | `M109 S220`; `G10 P0 S220`; none and PETG; a profile value | `S235`; `S235`; `S245`; the profile value |
+| P12 | A file already processed | Left byte-identical |
+| P13 | Object name containing `"` | Doubled inside `O"..."` |
+| P14 | P1 to P5 on the Klipper export, `tests/data/sample.gcode` | The same positions (milestone 9) |
 
-Name cases: `HEATSET_M3HS`, `HEATSET_M3HS:1`, `Bracket/heatset_m3hs (2)` and `NUT_M3HS` match
-`M3HS`; `PREHEATSET_M3HS` does not.
-
-G-code cases:
-
-| Case | Setup | Expected |
-| --- | --- | --- |
-| HG1 | Perimeters around the hole, nothing above the rim | Block after the last move of the rim layer; `Z_TOP` is that layer's top less the sink |
-| HG2 | Fill inside the hole | `E_POCKET_NOT_EMPTY` |
-| HG3 | Extrusion across the hole above the rim | `E_POCKET_NOT_EMPTY` |
-| HG4 | Rim half a layer off the layer boundaries | `Z_TOP` snaps to the printed rim |
-| HG5 | Hole perimeter written as arcs | Proof passes |
-| HG6 | A nut and an insert due at the same layer | One block, nut line first |
-| HG7 | Each firmware's heat-set template | Exact expected text |
-| HG8 | `M109 S220` and offset 15; then no temperature in the file | `TEMP=235`; then `TEMP=-1` |
-| HG9 | A heat-set template using `{yaw}` | `E_TEMPLATE` |
-
-Library and plugin cases:
-
-- A schema-1 config migrates with every tuned value kept, and validates.
-- A heat-set entry validates; a sink range whose minimum exceeds its maximum, and an unknown
-  kind, are rejected.
-- `read_config` migrates a stored schema-1 config, with no "not usable" message.
-- `save_config` round-trips a heat-set entry.
-- The slice gate blocks on an insert error and passes with `on_error` set to `skip`.
+Library and plugin cases: schema 1 migrates with every tuned nut value kept; `read_config`
+migrates a stored schema-1 config without the "not usable" message; a profile round-trips through
+`save_config`; the slice gate blocks on a TBD in normal mode and on an insert error.
 
 ## Milestones
 
-Each ends with its checks passing and a commit.
+The spec's milestones, with RepRapFirmware in place of Klipper, a milestone 0 for the printer tests,
+and the plugin and pages added as 6. Each ends with its tests passing and a commit.
 
 | Milestone | Build | Done when |
 | --- | --- | --- |
-| H0. Approve | Settle D1–D7; fold this plan into `docs/SPEC.md` | You sign off |
-| H1. Library and names | Schema 2, `migrate` (library, `read_config`, CLI), the `HEATSET_` marker | Library and name cases pass, and the existing tests with the six lines updated |
-| H2. Detection | `insert.py`, `hole.py`, `check_insert`, the pipeline branch, report schema 2 | H1–H19 pass |
-| H3. Export | `crosses_circle`, `plan_insert`, temperatures, templates per kind, shared blocks | HG1–HG9 pass |
-| H4. Plugin and pages | Panel and Nuts tab for both kinds | Plugin cases pass; wheel 0.3.0 builds |
-| H5. Macro and docs | Heat-set dry-run macro, README, manual-test | Macro test passes |
-| H6. In Orca and on the printer | The checks below | Results recorded in `docs/manual-test.md` |
+| 0. RRF ground work | An RRF dry-run `insert_nut.g` (check the values, report them with `echo`, pause with `M226`), so nut insertion can be dry-run on your printer now. Ask you for an Orca export of a test part with your RRF printer profile | Macro test keeps it in step with the nut RRF template; the export saved as `tests/data/sample_rrf.gcode` |
+| 1. Profile | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library |
+| 2. Routine math | `routine.py` | Derived values, push + L = Li + e, the heights table |
+| 3. RRF emitter | `emit.py`, RRF template set | The RRF golden file byte for byte; rehearse differs only in the mode value |
+| 4. Placement | `place.py`, export composition | P1–P13 on the RRF export, using hand-made insert records |
+| 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H19 |
+| 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |
+| 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |
+| 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
+| 9. Klipper | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` | The spec's Klipper golden file byte for byte; P14 |
 
-## Manual checks
+## Later
 
-- [ ] **Upgrade.** Remove 0.2.3, install 0.3.0 and add Nut insert to the process preset again.
-  Expect your M3SQ library as you tuned it, plus the M3HS entry.
-- [ ] **Insert A.** A test block with a Ø4.0 × 6.7 hole and a `HEATSET_M3HS` body flush with its
-  top. Expect `E_NOT_MODIFIER` until the body is a Modifier, then `UPRIGHT` and ok. Rotate the
-  block 90° about X: `W_TILTED`.
-- [ ] **Insert C.** The Nuts tab draws the hole as a cylinder in the right place.
-- [ ] **Insert D.** Export: one `INSERT_HEATSET` line after the layer that completes the rim,
-  with `Z_TOP` at that layer's top.
-- [ ] **Hole size.** Print the test block with your process preset, try an insert by hand, and
-  set the hole range from what fits.
-- [ ] **Insert E.** A dry run on the printer with `insert_heatset_dry_run.cfg`, then one real
-  insert into a test block.
-
-## Risks
-
-- **Printed holes differ from CAD.** Holes come out small, and Orca's X-Y hole compensation and
-  polyhole options change them further. The plugin measures the model, so set the hole range
-  from test prints made with the same process preset.
-- **Displaced plastic.** Melt can rise in a ring around the insert while later layers print
-  nearby. A small sink (0.1–0.3 mm) and Z hop keep the nozzle clear.
-- **A hot tip in a part mid-print.** Heat spreads into fresh layers. Speed, dwell and
-  temperature belong to the macro; prove them on a test block first.
-- **Press force.** Pressing needs bed adhesion, and a thin boss can flex. The wall warning reads
-  the model; the printed wall is the wall loops plus infill.
-- **Pick-up and release.** The tip must carry the insert down and leave it behind on the way up.
-
-## Out of scope
-
-- Pressing sideways or from below: a warning, and you install by hand.
-- Flanged inserts, whose flange sits on the surface.
-- A hole made by an Orca negative volume: the hole must be in the model, because the rays see
-  only printing parts.
-- Cold press-fit or ultrasonic inserts. They could reuse this path without the heat.
-- Checking for tool collisions when pressing after the last layer.
-- Tapered holes beyond what the diameter range absorbs.
+- **Insert height check**, as you asked. When the body's top is more than half a layer from the
+  hole's rim, warn: the press always ends flush with the probed surface, so the model would not
+  show what the printer does.
+- The spec's "Not now": the Klipper Python extra, more sizes per tool, plates after the first,
+  refills mid-print.
 
 ## Sources
 
-Read on 24 Nov 2026.
-
+- `docs/HEATSET_GCODE_SPEC.md`, your Word file of 23 Nov, converted on 24 Nov. Every word matches
+  the original, the five code blocks are byte-identical, and the worked example's derived values
+  reproduce from its formulas.
+- Your "Concept D heat-set tool: software and integration plan" (23 Nov): its Slicer plugin
+  section, open decisions and gaps.
+- `tests/data/sample.gcode`, exported from OrcaSlicer 2.5.0 with the Klipper flavor on 10 Nov.
+- Duet3D [G-code dictionary](https://docs.duet3d.com/User_manual/Reference/Gcodes) (G38.2–G38.5,
+  M73, M98, M109, M486, M568, T) and
+  [G-code meta commands](https://docs.duet3d.com/User_manual/Reference/Gcode_meta_commands)
+  (abort, echo to a file, loops in job files, macro parameters, variables), read on 24 Nov.
 - [ruthex M3 threaded insert, M3x5.7, at 3DJake](https://www.3djake.com/ruthex/threaded-insert-m3-100-pieces):
-  4.6 mm outer diameter, 4.0 mm hole, 5.7 mm length, 1.6 mm minimum wall.
+  4.6 mm outer diameter, 4.0 mm hole, 1.6 mm minimum wall.
 - [Prusa, heat-set inserts M3 standard](https://www.prusa3d.com/product/heat-set-inserts-m3-standard-100-pcs/):
   the iron at the filament's print temperature plus 10–20 °C.
-- [CNC Kitchen, tips for threaded inserts in 3D printing](https://cnckitchen.com/blog/tipps-amp-tricks-fr-gewindeeinstze-im-3d-druck-3awey?format=amp):
-  melt about 90 % of the depth and push the rest; printed holes come out smaller than in CAD.
