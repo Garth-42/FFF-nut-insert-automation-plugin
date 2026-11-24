@@ -42,7 +42,7 @@ RepRapFirmware comes first; Klipper later.
 ## Layout
 
 - `src/nutcore/` detection, checker, report, G-code export. No Orca imports.
-- `src/heatsetcore/` heat-set inserts: tool profile, routine math, G-code emitter. No Orca imports.
+- `src/heatsetcore/` heat-set inserts: profile, routine math, G-code emitter, placement. No Orca imports.
 - `src/nut_inserter/` the Orca plugin. `adapter.py` is the only module that calls `orca.host`.
 - `tests/builders.py` synthetic meshes and G-code. `tests/fake_orca/orca/` stand-in `orca` module.
 - `probe/nut_api_probe.py` single-file plugin a person runs in Orca to settle open API questions.

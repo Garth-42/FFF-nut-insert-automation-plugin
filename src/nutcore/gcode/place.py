@@ -23,6 +23,12 @@ _OBJECT_START = re.compile(
     r"\s*(EXCLUDE_OBJECT_START\b|M486\s+S\d|;\s*printing object\b)", re.IGNORECASE)
 _OBJECT_END = re.compile(
     r"\s*(EXCLUDE_OBJECT_END\b|M486\s+S-1\b|;\s*stop printing object\b)", re.IGNORECASE)
+# A nut block written at this point earlier: a heat-set block due here goes after it.
+_NUT_BLOCK_END = re.compile(r"\s*;NUT_INSERT_END\b")
+_LABEL_NAME = re.compile(
+    r"\s*(?:EXCLUDE_OBJECT_START\s+NAME=(?P<klipper>\S+)"
+    r"|;\s*printing object\s+(?P<comment>.+?)\s*$"
+    r"|M486\s+S(?P<index>\d+)(?:\s+A\"(?P<name>(?:[^\"]|\"\")*)\")?)", re.IGNORECASE)
 _MOVE = re.compile(r"(?:N\d+\s*)?G0*[0-3](?![\d.])", re.IGNORECASE)
 # Firmware retraction: a bare G10 retracts and G11 primes. G10 with parameters is something
 # else (tool offsets, or tool temperatures in RepRapFirmware).
@@ -54,7 +60,7 @@ def block_after(parsed: Parsed, last: int) -> int:
         text = lines[i]
         if _OBJECT_START.match(text):
             break
-        if _OBJECT_END.match(text):
+        if _OBJECT_END.match(text) or _NUT_BLOCK_END.match(text):
             best = i
             continue
         code = text.split(";", 1)[0].strip()
@@ -76,3 +82,32 @@ def block_after(parsed: Parsed, last: int) -> int:
         if end_of_print and not _HARMLESS.match(code):
             break                                      # the end G-code starts here
     return best
+
+
+def first_object_start(parsed: Parsed) -> int | None:
+    """Index of the first line that opens an object label, or None."""
+    return next((i for i, line in enumerate(parsed.lines) if _OBJECT_START.match(line)), None)
+
+
+def object_label_at(parsed: Parsed, line: int) -> str:
+    """The label of the object being printed at a line, or "" outside any object.
+
+    Klipper's EXCLUDE_OBJECT_START NAME, the text of a "; printing object" comment, or for
+    M486 the name its A parameter gave the index (the index itself when never named).
+    """
+    names: dict[str, str] = {}
+    current = ""
+    for text in parsed.lines[:line + 1]:
+        if _OBJECT_END.match(text):
+            current = ""
+            continue
+        found = _LABEL_NAME.match(text)
+        if not found:
+            continue
+        if found["index"] is not None:
+            if found["name"] is not None:
+                names[found["index"]] = found["name"].replace('""', '"')
+            current = names.get(found["index"], found["index"])
+        else:
+            current = found["klipper"] or found["comment"]
+    return current

@@ -207,3 +207,30 @@ Each entry says what differs from the spec and why. Newest last.
 44. **`profile.derived` moved to `routine.derived`.** The profile module holds data and
     validation; the routine math is in `routine.py`, with the heights table and each insert's
     positions, so the emitter writes no number of its own.
+
+## Heat-set inserts, milestone 4 (24 Nov 2026)
+
+45. **How `heatsetcore/place.py` reads the spec's placement rules.**
+    - The header goes before the first object label, which comes after the start G-code,
+      or before the first Z move when the file has no labels. The spec says "right after
+      the slicer's start G-code", which a file does not mark without comments.
+    - Blocks use `nutcore.gcode.place.block_after` (#39), which now also steps past a nut
+      block written at the same point, so the nut block comes first, as agreed.
+    - `z_top` snaps to the top of the first layer printed around the hole at or above the
+      modelled top. The empty-hole proof checks the layers between the hole's bottom and
+      that layer, with a circle of the hole radius less `PROOF_INSET`, the same margin as
+      the nut proof.
+    - The preheat goes after the last `M73` whose R is at least `preheat_lead`, rounded up
+      to whole minutes, above the R at the block. Without `M73` it goes `preheat_layers`
+      layers below the block. It never goes before the previous block.
+    - Keep-out (rule 8) is checked against the extrusion printed before the block. With
+      `after_layer` nothing above `z_top` is printed yet, so it only stops `end_of_print`.
+    - `OBJECT` is the label in force where the hole's rim layer is printed: Klipper's
+      `EXCLUDE_OBJECT_START` name, the text of the comment label RRF reads, or the name an
+      `M486 A` gave the index.
+    - Rule 5 (TBDs), a missing insert temperature and rule 6 apply to every insert. Rule 9
+      leaves out the inserts done last. All of them follow `on_error` like any other error;
+      a skipped insert is named in a `; HEATSET skipped` comment. An insert with nothing
+      printed around it is skipped quietly (`N_NOT_ON_PLATE`), as nuts are.
+    - The print temperature is read at the first block from `M104`, `M109`, `G10 P S` and
+      `M568 P S`, for the active tool. The header stays ASCII: the degree sign is dropped.

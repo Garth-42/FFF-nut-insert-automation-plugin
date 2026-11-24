@@ -54,7 +54,8 @@ def test_header_comments_list_every_profile_value_then_the_derived_ones():
     assert "; insert_temp = auto" in comments and "; push = 5.4" in comments
     assert "; ticks = 26" in comments
     assert "; filament_temps = PLA 225, PETG 245, ABS 265, ASA 265" in comments
-    assert "; insert_temp_used = 235 (print temperature 220 °C)" in comments
+    assert "; insert_temp_used = 235 (print temperature 220 C)" in comments
+    assert all(line.isascii() for line in lines)
     assert all(line.startswith((";", "M98")) for line in lines)
 
 

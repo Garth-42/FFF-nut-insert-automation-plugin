@@ -180,7 +180,8 @@ def header_lines(profile: dict, total_inserts: int, temp: float, version: str,
     lines += [f"; {n} = {_plain(profile[n])}" for n in names]
     lines += [f"; {n} = {_plain(v)}" for n, v in routine.derived(profile).items()]
     used = f"; insert_temp_used = {temperature(temp)}"
-    lines.append(used + (f" ({one_line(temp_source)})" if temp_source else ""))
+    source = one_line(temp_source).replace("°", "")       # keep the G-code ASCII
+    lines.append(used + (f" ({source})" if source else ""))
     return lines + _templates(profile)["config"](profile, total_inserts, temp)
 
 
