@@ -50,6 +50,47 @@ def cast(origins: np.ndarray, direction: np.ndarray, corners: np.ndarray) -> np.
     return result
 
 
+def cast_fan(centre: np.ndarray, axis: np.ndarray, s: np.ndarray, directions: np.ndarray,
+             corners: np.ndarray, beyond: np.ndarray | None = None) -> np.ndarray:
+    """Distances for rays from the points centre + s * axis, each in every direction: (S, D).
+
+    The same Moller-Trumbore test as cast, rearranged for origins on one line: the
+    per-triangle products are worked out once per direction and the position along the
+    line enters linearly, so a walk along a hole costs little more than one ring of rays.
+    beyond (S, D): only hits farther than this count, to find the next surface out.
+    """
+    s = np.atleast_1d(np.asarray(s, dtype=np.float64))
+    dirs = np.atleast_2d(np.asarray(directions, dtype=np.float64))
+    result = np.full((len(s), len(dirs)), np.inf)
+    if len(corners) == 0 or len(s) == 0 or len(dirs) == 0:
+        return result
+    a = np.asarray(axis, dtype=np.float64)
+    v0 = corners[:, 0]
+    e1 = corners[:, 1] - v0
+    e2 = corners[:, 2] - v0
+    pvec = np.cross(dirs[:, None, :], e2[None, :, :])                     # (D, T, 3)
+    det = np.einsum("dtj,tj->dt", pvec, e1)
+    usable = np.abs(det) > 1e-12                                          # not parallel
+    inv = np.where(usable, 1.0 / np.where(usable, det, 1.0), 0.0)
+    w0 = np.asarray(centre, dtype=np.float64) - v0                        # origin at s = 0
+    q0, q1 = np.cross(w0, e1), np.cross(a, e1)                            # (T, 3)
+    bu0, bu1 = np.einsum("tj,dtj->dt", w0, pvec), pvec @ a                # (D, T)
+    bv0, bv1 = dirs @ q0.T, dirs @ q1.T                                   # (D, T)
+    t0, t1 = np.einsum("tj,tj->t", q0, e2), np.einsum("tj,tj->t", q1, e2)  # (T,)
+    step = max(1, _MAX_PAIRS // (len(dirs) * len(v0)))
+    for start in range(0, len(s), step):
+        k = s[start:start + step, None, None]
+        bu = (bu0 + k * bu1) * inv
+        bv = (bv0 + k * bv1) * inv
+        t = (t0 + k * t1) * inv
+        hit = (usable & (bu >= -_EDGE_EPS) & (bv >= -_EDGE_EPS)
+               & (bu + bv <= 1 + _EDGE_EPS) & (t > _EDGE_EPS))
+        if beyond is not None:
+            hit &= t > beyond[start:start + step, :, None]
+        result[start:start + step] = np.where(hit, t, np.inf).min(axis=2)
+    return result
+
+
 def face_grid(centre: np.ndarray, p: np.ndarray, hp: float, q: np.ndarray, hq: float,
               n: int = RAY_GRID, inset: float = RAY_INSET) -> np.ndarray:
     """An n x n grid of points over the central part of a rectangle, shape (n*n, 3)."""

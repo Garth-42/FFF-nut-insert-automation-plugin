@@ -226,7 +226,7 @@ def test_report_round_trips_through_json_and_csv():
     report = flat_case(nut_centre=(0.15, 0, NUT_Z))
     again = Report.from_json(report.to_json())
     assert again.to_dict() == report.to_dict()
-    assert report.to_dict()["schema"] == 1
+    assert report.to_dict()["schema"] == 2 and report.nuts[0].kind == "nut"
     lines = report.to_csv().splitlines()
     assert lines[0].startswith("index,name,key")
     assert "N_OFF_CENTRE" in lines[1]
@@ -258,7 +258,7 @@ def test_modifiers_that_are_not_nuts_are_not_walls():
 
 
 def test_heat_set_insert_bodies_are_not_walls_and_not_nuts():
-    """Until insert detection exists, a HEATSET_ body is left alone: no record, no wall."""
+    """The nut check leaves a HEATSET_ body alone: no record, no wall (heatsetcore.detect)."""
     from builders import part
 
     insert = part("HEATSET_M3x5.7", box((4.6, 4.6, 5.7), (1.0, 0, NUT_Z)))   # cuts the nut

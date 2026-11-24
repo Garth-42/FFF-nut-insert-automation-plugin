@@ -7,7 +7,7 @@ import io
 import json
 from dataclasses import asdict, dataclass, field
 
-SCHEMA = 1
+SCHEMA = 2   # 2 added "kind"; schema-1 reports read as all nuts
 ERROR, WARNING, NOTE = "error", "warning", "note"
 
 
@@ -33,6 +33,7 @@ class NutRecord:
     instance: int
     part: int
     name: str
+    kind: str = "nut"             # "nut" or "heatset"
     key: str | None = None
     cls: str | None = None
     axis: list | None = None
@@ -107,8 +108,8 @@ class Report:
 
     @classmethod
     def from_dict(cls, data: dict) -> Report:
-        if data.get("schema") != SCHEMA:
-            raise ValueError(f"report schema must be {SCHEMA}")
+        if data.get("schema") not in (1, SCHEMA):
+            raise ValueError(f"report schema must be 1 or {SCHEMA}")
         nuts = []
         for item in data.get("nuts", []):
             item = dict(item)
@@ -126,7 +127,8 @@ class Report:
         writer = csv.writer(out, lineterminator="\n")
         writer.writerow(["index", "name", "key", "object", "instance", "class", "angle_deg",
                          "x", "y", "z", "z_low", "z_high", "roof_z", "rim_z", "pocket_width",
-                         "pocket_thickness", "pocket_depth", "status", "findings"])
+                         "pocket_thickness", "pocket_depth", "status", "findings", "kind",
+                         "hole_diameter", "wall"])
 
         def num(value, digits=3):
             return "" if value is None else f"{value:.{digits}f}"
@@ -141,5 +143,6 @@ class Report:
                 num(x), num(y), num(z), num(n.z_low), num(n.z_high), num(n.roof_z),
                 num(n.rim_z), " x ".join(num(w) for w in pocket.get("width") or []),
                 num(pocket.get("thickness")), num(pocket.get("depth")), n.status,
-                " | ".join(f"{f.code}: {f.message}" for f in n.findings)])
+                " | ".join(f"{f.code}: {f.message}" for f in n.findings), n.kind,
+                num(pocket.get("diameter")), num(pocket.get("wall"))])
         return out.getvalue()

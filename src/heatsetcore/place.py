@@ -292,7 +292,7 @@ def place(text: str, inserts, prof: dict, *, on_error: str = "block", version: s
     before: dict[int, list[str]] = {}                # lines to write before line i
     after: dict[int, list[str]] = {}                 # lines to write after line i
     head = _header_line(parsed)
-    header = [f"; HEATSET skipped {p.spec.label}: {f.code} {' '.join(f.message.split())}"
+    header = [emit.ascii_text(f"; HEATSET skipped {p.spec.label}: {f.code} {f.message}")
               for p, f in failed]
     if placed:
         header = emit.header_lines(prof, len(placed), temp, version, source) + header

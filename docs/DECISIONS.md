@@ -234,3 +234,50 @@ Each entry says what differs from the spec and why. Newest last.
       printed around it is skipped quietly (`N_NOT_ON_PLATE`), as nuts are.
     - The print temperature is read at the first block from `M104`, `M109`, `G10 P S` and
       `M568 P S`, for the active tool. The header stays ASCII: the degree sign is dropped.
+
+## Heat-set inserts, milestone 5 (24 Nov 2026)
+
+46. **How `heatsetcore` finds and checks an insert** (`insert.py`, `hole.py`, `checks.py`,
+    `detect.py`; cases H1–H20 in `tests/test_heatset_detect.py`).
+    - **Frame.** Normals binned by direction, as the plan says. The first of the eight
+      largest bins along which the body measures the profile's length and diameter, each
+      within `body_tolerance_mm`, wins.
+    - **Host.** The parts of the same copy that print (type part, or unknown) and are not
+      nut or insert bodies. An insert body that is still a printing part is
+      `E_NOT_MODIFIER`; it is never a wall of its own hole, so the hole is still checked.
+    - **Hole.** Two circle fits from 5 heights × 16 rays, the second from the first's
+      centre. The rim and bottom walks use 8 rays from the hole axis: 0.5 mm steps, then
+      6 rounds of 15 points between the last good and the first bad step, to 3·10⁻⁸ mm, so
+      a hole of exactly the needed depth passes `CHECK_EPS`. Through: no wall 0.3 mm below
+      the bottom.
+    - **Wall.** 36 directions × 5 heights, from the hole's wall to the next surface out. A
+      flat outside face between two rays reads at most 0.4 % of (r + wall) thick. Only
+      surfaces within 3 × `insert_od` of the body are cast against, so a thicker wall has
+      no value and passes.
+    - **Open end.** 7 rays along the axis from a disc of 0.6 r. Nothing within 50 mm above
+      the rim: `UPRIGHT`. Something below the rim: `E_DROP_PATH`. Every ray stopped within
+      0.2 mm of the rim is a ceiling: `INVERTED` when the hole is open below, otherwise
+      `E_DROP_PATH` (closed at both ends). Otherwise a lid with a gap: `UPRIGHT` and
+      `N_COVERED`.
+    - **Surface.** Rays down onto rings from r + 0.75 mm out to the pad's radius less
+      0.25 mm, 12 per ring. Points within 1 mm of the rim height get a plane fit, and its
+      tilt is held to `axis_tolerance_deg`, which is the plan's 0.5° by default; the
+      surface and the axis then share one setting.
+    - **`E_INTERFERENCE` (new, not in the plan's table).** A blind hole whose bottom is
+      more than `GAP_EPS` above the body's bottom: the body reaches into the floor, so the
+      insert cannot go as deep as modelled. The spec's depth rule only looks at the hole.
+    - **`E_NO_POCKET` and `E_DROP_PATH`** keep the nut checker's codes for the same faults.
+    - **Hold-down.** Per copy: the area of the printing parts' bottom faces on the bed, and
+      their height. `W_HOLD_DOWN` when the area is under `min_contact_area` or height ÷
+      √area is over `max_height_ratio`.
+    - **Speed.** `nutcore.rays.cast_fan` casts from points on one line in many directions,
+      setting up each triangle once per direction; `beyond` gives the next surface out.
+      The walks only cast against triangles near the axis. The 720-facet knurled body in a
+      256-facet hole (H18) went from 107–150 ms to about 50 ms; the other cases take
+      10–20 ms.
+    - **Report schema 2.** Records carry `kind`, "nut" or "heatset"; a schema-1 report
+      reads as nuts. The CSV adds kind, hole_diameter and wall at the end, so the existing
+      columns keep their places. `detect_inserts` numbers from `first_index`, so the
+      plugin can number inserts after the nuts (milestone 6).
+    - **ASCII comments.** `emit.ascii_text` turns °, ², ÷, √, × and long dashes into plain
+      text for G-code comments, since finding messages use them (`; HEATSET skipped`).

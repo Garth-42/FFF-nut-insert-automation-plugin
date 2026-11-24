@@ -77,6 +77,15 @@ def one_line(text) -> str:
     return " ".join(str(text).split())
 
 
+_ASCII = str.maketrans({"–": "-", "—": "-", "°": " deg", "²": "2", "÷": "/", "√": "sqrt ",
+                        "×": "x"})
+
+
+def ascii_text(text) -> str:
+    """One line of plain ASCII for a G-code comment: finding messages use °, ² and dashes."""
+    return one_line(str(text).translate(_ASCII)).encode("ascii", "replace").decode()
+
+
 def _plain(value) -> str:
     """A profile value for a header comment."""
     if value is None:
@@ -180,7 +189,7 @@ def header_lines(profile: dict, total_inserts: int, temp: float, version: str,
     lines += [f"; {n} = {_plain(profile[n])}" for n in names]
     lines += [f"; {n} = {_plain(v)}" for n, v in routine.derived(profile).items()]
     used = f"; insert_temp_used = {temperature(temp)}"
-    source = one_line(temp_source).replace("°", "")       # keep the G-code ASCII
+    source = ascii_text(temp_source.replace("°", ""))      # keep the G-code ASCII
     lines.append(used + (f" ({source})" if source else ""))
     return lines + _templates(profile)["config"](profile, total_inserts, temp)
 

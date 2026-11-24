@@ -2,10 +2,11 @@
 
 Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
 `docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
-(0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), and milestones 2
+(0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), milestones 2
 to 4: the routine math, the RRF emitter with its golden file, and placement in a real
-export. Nothing is inserted from Orca yet: detection (milestone 5) finds the inserts and
-the plugin (milestone 6) wires placement into the export step.
+export, and milestone 5: detection and checks (DECISIONS.md #46). Nothing is inserted from
+Orca yet: the plugin (milestone 6) wires detection and placement into the check and the
+export step.
 
 ## Summary
 
@@ -401,7 +402,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 2. Routine math (done) | `routine.py` | Derived values, push + L = Li + e, the heights table (`tests/test_heatset_routine.py`) |
 | 3. RRF emitter (done) | `emit.py`, RRF template set | The RRF golden file byte for byte (`tests/data/heatset_golden_rrf.gcode`); rehearse differs only in the mode value |
 | 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #45) |
-| 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H20 |
+| 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #46) |
 | 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |
 | 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |
 | 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |

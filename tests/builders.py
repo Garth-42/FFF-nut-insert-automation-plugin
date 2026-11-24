@@ -112,6 +112,113 @@ def v_slot(gap_plus_y=0.1, gap_minus_y=0.1, thickness=2.1, opening=8.08, roof_z=
     return part(name, merge(boxes))
 
 
+# --- Heat-set inserts -----------------------------------------------------------------------
+
+def _ring(radius, z, sides, centre=(0.0, 0.0)):
+    a = np.linspace(0, 2 * np.pi, sides, endpoint=False)
+    return np.column_stack([centre[0] + radius * np.cos(a), centre[1] + radius * np.sin(a),
+                            np.broadcast_to(np.asarray(z, dtype=float), (sides,))])
+
+
+def _band(inner, outer):
+    """Triangles joining two rings of the same size, stacked as vertices [inner, outer]."""
+    n = len(inner)
+    i = np.arange(n)
+    j = (i + 1) % n
+    tris = np.vstack([np.column_stack([i, j, n + i]), np.column_stack([j, n + j, n + i])])
+    return Mesh(np.vstack([inner, outer]), tris.astype(np.int32))
+
+
+def _disc(radius, z, sides, centre=(0.0, 0.0)):
+    rim = _ring(radius, z, sides, centre)
+    i = np.arange(sides)
+    tris = np.column_stack([np.full(sides, sides), i, (i + 1) % sides])
+    return Mesh(np.vstack([rim, [[centre[0], centre[1], z]]]), tris.astype(np.int32))
+
+
+def _quad(a, b, c, d):
+    return Mesh(np.array([a, b, c, d], dtype=float), np.array([[0, 1, 2], [0, 2, 3]],
+                                                               dtype=np.int32))
+
+
+def insert_body(od=4.6, length=5.7, sides=64, bore=None, knurl=0.0, centre=(0, 0, 0),
+                rot=None, name="HEATSET_M3x5.7", kind="unknown") -> PartSnapshot:
+    """A closed faceted cylinder along local Z, middle at `centre` after `rot`.
+
+    bore: diameter of a hole along the axis. knurl: depth of a zig-zag on the outside.
+    """
+    radius = np.full(sides, od / 2) - knurl * (np.arange(sides) % 2)
+    a = np.linspace(0, 2 * np.pi, sides, endpoint=False)
+    outer = np.column_stack([radius * np.cos(a), radius * np.sin(a)])
+    lo, hi = -length / 2, length / 2
+    o0 = np.column_stack([outer, np.full(sides, lo)])
+    o1 = np.column_stack([outer, np.full(sides, hi)])
+    parts = [_band(o0, o1)]
+    if bore:
+        b0, b1 = _ring(bore / 2, lo, sides), _ring(bore / 2, hi, sides)
+        parts += [_band(b1, b0), _band(b0, o0), _band(o1, b1)]
+    else:                                       # solid: a fan from the middle of each end
+        i = np.arange(sides)
+        fan0 = np.column_stack([np.full(sides, sides), (i + 1) % sides, i])
+        fan1 = np.column_stack([np.full(sides, sides), i, (i + 1) % sides])
+        parts += [Mesh(np.vstack([o0, [[0, 0, lo]]]), fan0.astype(np.int32)),
+                  Mesh(np.vstack([o1, [[0, 0, hi]]]), fan1.astype(np.int32))]
+    mesh = merge(parts)
+    vertices = apply_matrix(mesh.vertices, rot) if rot is not None else mesh.vertices
+    return part(name, Mesh(vertices + np.asarray(centre, dtype=float), mesh.triangles),
+                kind=kind)
+
+
+def hole_block(hole=4.0, depth=6.7, size=12.0, height=10.0, sides=64, step=None,
+               chamfer=None, through=False, slope_deg=0.0, lid_gap=None, name="Boss",
+               kind="unknown") -> PartSnapshot:
+    """A square block standing on Z 0 with a round hole down from its top face at Z height.
+
+    Built from separate pieces, like pocket_block: the hole wall (a faceted tube with its
+    vertices on the true circle), its floor unless through, the top face, four sides and
+    the bottom. step=(diameter, depth): the hole narrows to a screw hole at that depth.
+    chamfer=c: a 45° entry chamfer. slope_deg: the top face tilts about Y. lid_gap: a slab
+    over the whole block, that far above its top face.
+    """
+    r, top, half = hole / 2, height, size / 2
+    pieces = []
+    wall_top = top - chamfer if chamfer else top
+    if step:
+        screw, step_depth = step[0] / 2, step[1]
+        pieces += [_band(_ring(r, top - step_depth, sides), _ring(r, wall_top, sides)),
+                   _band(_ring(screw, top - step_depth, sides), _ring(r, top - step_depth, sides)),
+                   _band(_ring(screw, 0.0, sides), _ring(screw, top - step_depth, sides))]
+        opening = screw
+    else:
+        bottom = 0.0 if through else top - depth
+        pieces.append(_band(_ring(r, bottom, sides), _ring(r, wall_top, sides)))
+        if not through:
+            pieces.append(_disc(r, bottom, sides))
+        opening = r
+    if chamfer:
+        pieces.append(_band(_ring(r, wall_top, sides), _ring(r + chamfer, top, sides)))
+    edge = r + chamfer if chamfer else r
+    inner, outer = _ring(edge, 0.0, sides), _ring(half, 0.0, sides)
+    slope = np.tan(np.radians(slope_deg))
+    inner[:, 2], outer[:, 2] = top + slope * inner[:, 0], top + slope * outer[:, 0]
+    pieces.append(_band(inner, outer))
+    for (x0, y0), (x1, y1) in (((-half, -half), (half, -half)), ((half, -half), (half, half)),
+                               ((half, half), (-half, half)), ((-half, half), (-half, -half))):
+        pieces.append(_quad((x0, y0, 0), (x1, y1, 0), (x1, y1, top), (x0, y0, top)))
+    if through or step:                       # the bottom, around a square opening
+        g = opening + 0.1
+        pieces += [_quad((-half, g, 0), (-half, half, 0), (half, half, 0), (half, g, 0)),
+                   _quad((-half, -half, 0), (-half, -g, 0), (half, -g, 0), (half, -half, 0)),
+                   _quad((g, -g, 0), (g, g, 0), (half, g, 0), (half, -g, 0)),
+                   _quad((-half, -g, 0), (-half, g, 0), (-g, g, 0), (-g, -g, 0))]
+    else:
+        pieces.append(_quad((-half, -half, 0), (-half, half, 0), (half, half, 0),
+                            (half, -half, 0)))
+    if lid_gap is not None:
+        pieces.append(box((size, size, 1.0), (0, 0, top + lid_gap + 0.5)))
+    return part(name, merge(pieces), kind=kind)
+
+
 def sample_record():
     """The nut record the plugin reported in Orca for tests/data/sample.gcode.
 
