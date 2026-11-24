@@ -326,3 +326,41 @@ Each entry says what differs from the spec and why. Newest last.
     - **The Nuts tab** draws each insert's two tool footprints at its top: mouth over the
       hole for the hot push, solid; pad over the hole for the press, dashed. These are the
       circles rule 8 checks.
+
+## Heat-set inserts, milestone 7 (24 Nov 2026)
+
+48. **The RepRapFirmware macros, `macros/heatset/*.g`.** One file per call the emitter
+    writes, plus `init.g` (globals, limits, axis A, the saved magazine), `limits.g`,
+    `heat.g`, `stock.g`, `fail.g`, `stop.g`, `save.g` and `refill.g`. Install guide and
+    bring-up steps: `macros/heatset/README.md`. Not yet run on a printer; the static
+    checks are in `tests/test_heatset_macros.py`.
+    - **Abort asks instead of pausing.** The spec's abort stays in place, sets the throat
+      to standby and pauses. RRF's `abort` ends the print, and after a pause (`M226`, the
+      plan's choice) and a resume the print's own `G0` lines would run on with the tool
+      where it stopped, the pad perhaps on the part. So `fail.g` stays in place, throat at
+      standby, and asks with a blocking `M291`: "Go on" skips the rest of the insert (or
+      block), lifts straight up to the block's safe height and heats again; "Stop the print"
+      turns the throat and print tool heaters off and ends the print with `abort`. The raw
+      moves left in a skipped insert run at the safe height, or at the routine's own
+      approach height, which clears the part by design.
+    - **Probes and the push use `G38.3`** (no error when nothing trips) and read the float
+      afterwards, rather than `G38.2`, whose error inside a macro might end the print
+      instead of reaching the macro's own failure handling. The probe never goes more than
+      surface_tol + 0.05 mm below the expected trip; the press never more than press_guard
+      + 0.5 mm below the probe trip.
+    - **Limits cap speeds and waits, and refuse distances:** a probe or press speed over
+      the limit runs at the limit; a push or unsheath over its limit stops the insert,
+      since a shorter push would leave it half in. Temperatures over the limit end the print
+      at the header.
+    - **The magazine** persists in `/sys/heatset/count.g`: count, key and the follower's
+      pending retract. A short magazine asks for a refill and the number loaded
+      (`M291 S5`), or goes on without inserts. A stopped insert is not counted out.
+    - **Rehearse mode** sets the tool's temperatures to 0 before selecting it, never moves
+      A, skips the float checks and the probe (s = z_top + rehearse_lift), and lowers the
+      pad to s for the press. The count does not change.
+    - **The last insert of the print** turns the throat off in `end.g`, counted from
+      `require.g`'s total.
+    - **Unsheath** moves Z and A together with F = V × 60 × √2, so each moves at V, which
+      needs axis A to be linear (`M584 ... R0`).
+    - **Every insert is logged** to the console and `/sys/heatset/log.csv`.
+    - **No LED.** The spec's amber LED is Klipper hardware; RRF warns with a message.

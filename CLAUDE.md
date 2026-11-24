@@ -47,3 +47,5 @@ RepRapFirmware comes first; Klipper later.
 - `src/nut_inserter/` the Orca plugin. `adapter.py` is the only module that calls `orca.host`.
 - `tests/builders.py` synthetic meshes and G-code. `tests/fake_orca/orca/` stand-in `orca` module.
 - `probe/nut_api_probe.py` single-file plugin a person runs in Orca to settle open API questions.
+- `macros/heatset/` the RepRapFirmware 3.6 macros the heat-set G-code calls. `tests/test_heatset_macros.py`
+  keeps them in step with `heatsetcore/emit.py`.

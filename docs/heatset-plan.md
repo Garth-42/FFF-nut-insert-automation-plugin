@@ -6,8 +6,9 @@ Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
 to 5: the routine math, the RRF emitter with its golden file, placement in a real export,
 detection and checks (DECISIONS.md #46), and milestone 6 (wheel 0.3.0): the plugin finds
 inserts, gates the slice and writes the heat-set G-code at export, with the Heat-set and
-Machine settings tabs (DECISIONS.md #47). The printer macros the G-code calls
-(`heatset/*.g`) come in milestone 7: until then, do not run a file with heat-set blocks.
+Machine settings tabs (DECISIONS.md #47). Milestone 7, the RepRapFirmware macros the
+G-code calls (`macros/heatset/`, DECISIONS.md #48), is written and checked statically but
+has not run on a printer: bring it up in rehearse mode first (milestone 8).
 
 ## Summary
 
@@ -75,8 +76,10 @@ reference, read on 24 Nov.
   probing speed per move) arrived in 3.6.0. Without it, every G38 move runs at the probe's one
   `M558` speed, but the pad probe (2.0 mm/s), the push (0.5 mm/s) and the press (1.0 mm/s) need
   three. Macro parameters and variables need 3.3, and `T T{expression}` needs 3.4.
-- **Abort becomes a pause.** RRF's `abort` ends the whole print, so the spec's abort (stay in place,
-  throat to standby, pause with a message) is `M568 P<tool> A1`, `M291` and `M226`.
+- **Abort becomes a question.** RRF's `abort` ends the whole print, and after a pause and resume
+  the print's own moves would run on with the tool where it stopped. So `fail.g` stays in place
+  with the throat at standby (`M568 P<tool> A1`) and asks with a blocking `M291`: go on without
+  the insert, lifting clear, or stop the print (DECISIONS.md #48).
 - **Preheat without selecting the tool:** `M568 P<tool> S<temp> A2` heats the heat-set tool to its
   active temperature while the print tool keeps printing.
 - **Tool save and restore:** `begin.g` stores `state.currentTool` in a global, and `end.g` selects it
@@ -405,7 +408,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #45) |
 | 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #46) |
 | 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #47) |
-| 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |
+| 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #48). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
 | 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
 | 9. Klipper | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` | The spec's Klipper golden file byte for byte; P14 |
 

@@ -117,8 +117,17 @@ included, so expect to add it again after installing a newer wheel.
   profile still in Rehearse mode, slice and export. Expect the header
   (`; HEATSET profile "Concept D"`) before the first object label, `M98 P"heatset/..."`
   lines after the layer that prints the hole's rim, and `insert_temp_used` giving the
-  print temperature plus 15 °C. Save the file as `tests/data/sample_rrf.gcode`. Do not
-  run it on the printer: the `heatset/*.g` macros come in milestone 7.
+  print temperature plus 15 °C. Save the file as `tests/data/sample_rrf.gcode`. Run it on
+  the printer only as check H says, in rehearse mode.
+
+  Result:
+
+- [ ] **H, Heat-set macros, rehearse mode** (milestone 8 starts here). Install
+  `macros/heatset/` as its README says, with the profile in Rehearse mode. Run check G's
+  file with `M37 P"<file>"` first, then print it. Expect no heat, no follower move, every
+  move rehearse_lift above the part, and `rehearsed` lines in `/sys/heatset/log.csv`. Then
+  work through the README's bring-up checks (float, `G38.3` on Z and A, the unsheath
+  speed, a cancelled object, Stop the print) and note each result here.
 
   Result:
 

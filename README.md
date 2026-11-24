@@ -9,7 +9,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 261 tests pass on synthetic
+All seven milestones of the build brief are implemented. 306 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
@@ -20,8 +20,9 @@ finds bodies named `HEATSET_<key>`, checks their holes (diameter, depth, wall, s
 tilt, hold-down), gates the slice and writes the heat-set header, preheats and blocks into
 the exported G-code after the nut blocks. The panel has Heat-set and Machine settings tabs
 for the tool profile, and the Nuts tab draws each insert's tool footprints. Not yet tried
-in Orca. The RepRapFirmware macros the G-code calls (`heatset/*.g`) are the next
-milestone: until they exist, do not run a file with heat-set blocks on the printer.
+in Orca. The RepRapFirmware macros the G-code calls are in
+[`macros/heatset/`](macros/heatset/README.md), with their install guide. They have not run
+on a printer: bring them up in rehearse mode first, as that guide says.
 
 In OrcaSlicer 2.5.0 (macOS) it has run end to end on one real part: a flat M3 square nut
 in a roofed pocket, Voron 2.4 profile, Klipper. The check, the docked panel, the Nuts
@@ -145,11 +146,12 @@ Replace them in the panel with values from test prints with your own nuts and pr
 
 ```
 src/nutcore/        detection, checker, report, G-code export. Plain Python + numpy.
+src/heatsetcore/    heat-set inserts: profile, detection, routine, G-code. Plain Python + numpy.
 src/nut_inserter/   the Orca plugin. adapter.py holds every orca.host call.
 probe/              single-file plugin that logs what Orca's plugin API exposes
 tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py
 docs/               SPEC, DECISIONS (deviations), api-facts, api-gaps, manual-test
-macros/             printer-side macros: dry runs of the nut insert for RRF and Klipper
+macros/             printer-side macros: nut insert dry runs (RRF, Klipper), heat-set (RRF)
 ```
 
 The data flow:
