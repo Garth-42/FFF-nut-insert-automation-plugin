@@ -167,3 +167,28 @@ Each entry says what differs from the spec and why. Newest last.
     `orca.LifecycleEvent`, and only on the main thread. When that event does not come, the
     next check or panel message raises it. Items left out raise a warning; a refused
     export raises an error.
+
+## Heat-set inserts, milestone 1 (24 Nov 2026)
+
+41. **Settings schema 2.** The settings document gains a `heatset` section, one profile per
+    heat-set tool (`heatsetcore.profile`). `library.migrate()` turns a schema-1 document
+    into schema 2 by adding the default section and changing nothing else.
+    `state.read_config`, the panel's save and the command line run it before validating.
+    Without it, `read_config` would treat a schema-1 library as unusable and show the
+    defaults, and the next save would overwrite the tuned nut ranges. Bodies named
+    `HEATSET_<key>` are neither walls nor nut records in the nut detection.
+42. **The heat-set profile differs from docs/HEATSET_GCODE_SPEC.md** as Garth decided on
+    24 Nov 2026:
+    - Bodies are named `HEATSET_<key>`, not `HSI_<key>`. The key is the profile's
+      `insert_key`, which may contain dots (`M3x5.7`), unlike a nut key.
+    - `firmware` defaults to `reprapfirmware` (spelled as the nut settings spell it, not
+      `rrf`) and `timing` to `after_layer`: the printer tests run on RepRapFirmware 3.6, and
+      inserts go in right after the layer that finishes the hole's rim.
+    - `insert_temp` is a manual override; empty means automatic. Automatic is the print
+      tool's temperature in the G-code plus the new `insert_temp_offset` (15 °C, the spec's
+      "+10–20 °C"). The spec's per-filament table is kept as `filament_temps`, the fallback
+      when the G-code sets no temperature.
+    - New TBD variables: `magazine_capacity` (rule 9 needs a number), and
+      `min_contact_area` and `max_height_ratio` for the hold-down warning.
+    - TBD is a `tbd` list of variable names; each holds the spec's placeholder until
+      measured. Profiles are found by `insert_key`, which must be unique.

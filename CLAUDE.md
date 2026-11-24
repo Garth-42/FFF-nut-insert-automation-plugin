@@ -3,10 +3,14 @@
 The full design and build brief is `docs/SPEC.md`. Read it before changing behaviour.
 Deviations from it are logged in `docs/DECISIONS.md`.
 
+Heat-set inserts: `docs/HEATSET_GCODE_SPEC.md` is the tool's G-code spec and
+`docs/heatset-plan.md` says how it fits this plugin, what was decided and the milestones.
+RepRapFirmware comes first; Klipper later.
+
 ## Rules
 
-1. Only the `nut_inserter` package may import `orca`. `nutcore` is plain Python 3.12 + numpy
-   and its tests must pass without Orca.
+1. Only the `nut_inserter` package may import `orca`. `nutcore` and `heatsetcore` are plain
+   Python 3.12 + numpy and their tests must pass without Orca.
 2. Do not invent `orca` calls. The only allowed calls are in the API table in `docs/SPEC.md`.
    If you need another, record it in `docs/api-gaps.md` and build the fallback.
 3. When `docs/probe-log.txt` disagrees with the spec, the log wins. Record the difference in
@@ -25,6 +29,7 @@ Deviations from it are logged in `docs/DECISIONS.md`.
 9. Nothing that imports numpy may run while Orca loads `nut_inserter/__init__.py`. Orca asks
    for permission on every file a plugin opens until `permissions.request()` is granted, which
    happens after the module has loaded. Import `state` inside capability methods only.
+   `nutcore.library` and `heatsetcore.profile` are read during load: keep them numpy-free.
 
 ## Commands
 
@@ -37,6 +42,7 @@ Deviations from it are logged in `docs/DECISIONS.md`.
 ## Layout
 
 - `src/nutcore/` detection, checker, report, G-code export. No Orca imports.
+- `src/heatsetcore/` heat-set inserts: the tool profile so far. No Orca imports.
 - `src/nut_inserter/` the Orca plugin. `adapter.py` is the only module that calls `orca.host`.
 - `tests/builders.py` synthetic meshes and G-code. `tests/fake_orca/orca/` stand-in `orca` module.
 - `probe/nut_api_probe.py` single-file plugin a person runs in Orca to settle open API questions.

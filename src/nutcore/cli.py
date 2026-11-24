@@ -23,7 +23,7 @@ from .report import Report
 def _load_config(path: str | None) -> dict:
     if not path:
         return library.default_config()
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return library.migrate(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
 def _check(args) -> int:

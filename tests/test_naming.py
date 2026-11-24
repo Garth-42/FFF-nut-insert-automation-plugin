@@ -2,7 +2,7 @@
 
 import pytest
 
-from nutcore.naming import looks_like_nut, match_key
+from nutcore.naming import looks_like_insert, looks_like_nut, match_insert_key, match_key
 
 
 @pytest.mark.parametrize("name", ["NUT_M3SQ", "NUT_M3SQ:1", "NUT_M3SQ v2:1", "NUT_M3SQ (2)",
@@ -26,3 +26,22 @@ def test_only_real_nut_markers_count_as_nuts():
 def test_longest_key_wins():
     assert match_key("NUT_M3SQ_THIN:1", ["M3SQ", "M3SQ_THIN"]) == "M3SQ_THIN"
     assert match_key("NUT_M3SQ_THIN:1", ["M3SQ_THIN", "M3SQ"]) == "M3SQ_THIN"
+
+
+@pytest.mark.parametrize("name", ["HEATSET_M3x5.7", "HEATSET_M3x5.7:1",
+                                  "Bracket/heatset_m3x5.7 (2)", "HEATSET_M3X5.7.step"])
+def test_insert_names_that_match(name):
+    assert match_insert_key(name, ["M3x5.7"]) == "M3x5.7"
+    assert looks_like_insert(name) and not looks_like_nut(name)
+
+
+@pytest.mark.parametrize("name", ["PREHEATSET_M3x5.7", "HEATSET_M3x5.75", "HEATSETM3x5.7",
+                                  "NUT_M3x5.7"])
+def test_insert_names_that_do_not_match(name):
+    assert match_insert_key(name, ["M3x5.7"]) is None
+
+
+def test_the_two_markers_are_separate():
+    assert match_key("HEATSET_M3SQ", ["M3SQ"]) is None
+    assert match_insert_key("NUT_M3SQ", ["M3SQ"]) is None
+    assert not looks_like_insert("PREHEATSET_M3x5.7")

@@ -3,6 +3,10 @@
 The settings are one JSON document (see docs/SPEC.md, "data contracts").
 `default_config()` returns the document as a plain dict, `validate()` lists what
 is wrong with one, and `parse()` turns a valid one into typed objects.
+
+Schema 2 adds the "heatset" section: one profile per heat-set tool (heatsetcore.profile).
+`migrate()` upgrades a schema-1 document and must run before `validate()` on anything
+saved, so a tuned nut library is never replaced by the defaults.
 """
 
 from __future__ import annotations
@@ -11,9 +15,11 @@ import copy
 import re
 from dataclasses import dataclass
 
+from heatsetcore import profile as heatset_profile
+
 from .gcode import templates
 
-SCHEMA = 1
+SCHEMA = 2
 FIRMWARES = ("klipper", "reprapfirmware", "marlin")
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9]+(_[A-Za-z0-9]+)*$")
 
@@ -55,7 +61,20 @@ _DEFAULT = {
 
 def default_config() -> dict:
     """A fresh copy of the default settings. Every pocket number is a placeholder."""
-    return copy.deepcopy(_DEFAULT)
+    config = copy.deepcopy(_DEFAULT)
+    config["heatset"] = heatset_profile.default_section()
+    return config
+
+
+def migrate(config):
+    """The settings as schema 2. A schema-1 document gains the default heat-set section and
+    keeps everything else. Anything else is returned unchanged, for validate() to judge.
+    The argument is never modified."""
+    if isinstance(config, dict) and config.get("schema") == 1:
+        config = copy.deepcopy(config)
+        config["schema"] = SCHEMA
+        config.setdefault("heatset", heatset_profile.default_section())
+    return config
 
 
 class ConfigError(ValueError):
@@ -122,12 +141,19 @@ class NutType:
 class Library:
     settings: Settings
     nuts: dict[str, NutType]  # upper-case key -> nut type
+    heatset: tuple = ()       # heat-set tool profiles, validated dicts (heatsetcore.profile)
 
     def keys(self) -> list[str]:
         return [nut.key for nut in self.nuts.values()]
 
     def get(self, key: str | None) -> NutType | None:
         return self.nuts.get(key.upper()) if key else None
+
+    def insert_keys(self) -> list[str]:
+        return [p["insert_key"] for p in self.heatset]
+
+    def heatset_profile(self, key: str | None) -> dict | None:
+        return heatset_profile.profile_for_key(self.heatset, key)
 
 
 def _is_number(value) -> bool:
@@ -228,6 +254,28 @@ def validate(config) -> list[str]:
         if isinstance(nut.get("corner"), dict):
             _check_positive(errors, f"{where} corner", nut["corner"], "seat_gap_max",
                             allow_zero=True)
+    return errors + _validate_heatset(config.get("heatset"))
+
+
+def _validate_heatset(section) -> list[str]:
+    if not isinstance(section, dict) or not isinstance(section.get("profiles"), list):
+        return ["heatset: must hold a list of profiles"]
+    errors: list[str] = []
+    names, keys = set(), set()
+    for i, prof in enumerate(section["profiles"]):
+        errors += heatset_profile.validate_profile(prof, f"heat-set profile {i + 1}")
+        if not isinstance(prof, dict):
+            continue
+        name, key = prof.get("name"), prof.get("insert_key")
+        if isinstance(name, str):
+            if name in names:
+                errors.append(f"heat-set profile {name!r}: the name is used twice")
+            names.add(name)
+        if isinstance(key, str):
+            if key.upper() in keys:
+                errors.append(f"heat-set profile {name!r}: insert_key {key} is used by another "
+                              "profile; one insert size per tool, one tool per size")
+            keys.add(key.upper())
     return errors
 
 
@@ -263,4 +311,5 @@ def parse(config: dict) -> Library:
             corner=CornerSpec(c["enabled"], tuple(c["thickness"]), tuple(c["opening"]),
                               float(c["seat_gap_max"]), float(c["height_min"])),
         )
-    return Library(settings=settings, nuts=nuts)
+    profiles = tuple(copy.deepcopy(p) for p in config["heatset"]["profiles"])
+    return Library(settings=settings, nuts=nuts, heatset=profiles)

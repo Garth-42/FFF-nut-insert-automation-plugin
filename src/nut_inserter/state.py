@@ -96,6 +96,7 @@ def read_config() -> tuple[dict, str | None]:
         config = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
         if not config or "nuts" not in config:
             return library.default_config(), None      # nothing saved yet
+        config = library.migrate(config)               # keeps a schema-1 nut library
         errors = library.validate(config)
         if errors:
             raise library.ConfigError(errors)
@@ -369,6 +370,7 @@ def _handle(message: dict, reply) -> None:
 
 
 def _save_config(config, reply) -> None:
+    config = library.migrate(config)      # a library exported before schema 2 still imports
     errors = library.validate(config)
     if errors:
         reply({"type": "error", "message": "Not saved. " + " ".join(e + "." for e in errors)})

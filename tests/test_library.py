@@ -34,7 +34,9 @@ def test_validation_rejects_bad_values():
     assert _broken(lambda c: c["nuts"].append(dict(c["nuts"][0], key="m3sq")))
     assert _broken(lambda c: c["settings"].update(on_error="ignore"))
     assert _broken(lambda c: c["settings"].update(firmware="grbl"))
-    assert _broken(lambda c: c.update(schema=2))
+    assert _broken(lambda c: c.update(schema=3))
+    assert _broken(lambda c: c.update(schema=1))     # schema 1 is only read through migrate()
+    assert _broken(lambda c: c.pop("heatset"))
 
 
 def test_unknown_placeholder_is_a_template_error():

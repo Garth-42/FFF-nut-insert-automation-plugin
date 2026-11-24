@@ -9,9 +9,15 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 91 tests pass on synthetic
+All seven milestones of the build brief are implemented. 153 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
+
+Heat-set inserts are being added, RepRapFirmware first: see
+[`docs/heatset-plan.md`](docs/heatset-plan.md) and
+[`docs/HEATSET_GCODE_SPEC.md`](docs/HEATSET_GCODE_SPEC.md). So far the settings hold the
+heat-set tool profile (schema 2; a saved schema-1 library is migrated, not replaced) and
+bodies named `HEATSET_<key>` are recognised and left alone. Nothing is inserted yet.
 
 In OrcaSlicer 2.5.0 (macOS) it has run end to end on one real part: a flat M3 square nut
 in a roofed pocket, Voron 2.4 profile, Klipper. The check, the docked panel, the Nuts
@@ -41,7 +47,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.5-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.6-py3-none-any.whl`.
 
 ## Try it without Orca
 

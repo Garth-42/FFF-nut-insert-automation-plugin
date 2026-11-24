@@ -1,8 +1,9 @@
 # Heat-set inserts: plan
 
 Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
-`docs/HEATSET_GCODE_SPEC.md`. Milestone 0 and the export pop-up are built (wheels 0.2.4 and 0.2.5); the
-heat-set work itself is not started.
+`docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
+(0.2.5) and milestone 1, the heat-set profile and settings schema 2 (0.2.6). Nothing is
+inserted yet.
 
 ## Summary
 
@@ -394,7 +395,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | Milestone | Build | Done when |
 | --- | --- | --- |
 | 0. RRF ground work (done, 0.2.4) | The RRF dry-run `macros/reprapfirmware/insert_nut.g` (check the values, report them, pause with `M226`), and nut blocks moved outside object labels (`nutcore/gcode/place.py`) | Its test keeps it in step with the nut RRF template; placement tests on the real export and its RRF variants (`tests/test_place.py`) |
-| 1. Profile | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library |
+| 1. Profile (done, 0.2.6) | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library (`tests/test_heatset_profile.py`) |
 | 2. Routine math | `routine.py` | Derived values, push + L = Li + e, the heights table |
 | 3. RRF emitter | `emit.py`, RRF template set | The RRF golden file byte for byte; rehearse differs only in the mode value |
 | 4. Placement | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records |

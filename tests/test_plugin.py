@@ -265,6 +265,29 @@ def test_unusable_saved_settings_fall_back_to_defaults(plugin):
     assert plugin.panel.posted[-1]["type"] == "error"
 
 
+def _schema_1_library():
+    old = library.default_config()
+    del old["heatset"]
+    old["schema"] = 1
+    old["nuts"][0]["flat"]["width"] = [5.65, 5.85]           # tuned by test prints
+    return old
+
+
+def test_a_saved_schema_1_library_is_migrated_not_replaced(plugin):
+    plugin.insert._saved = json.dumps(_schema_1_library())
+    config, problem = state.read_config()
+    assert problem is None and config["schema"] == 2 and "heatset" in config
+    assert config["nuts"][0]["flat"]["width"] == [5.65, 5.85]
+
+
+def test_a_library_exported_before_schema_2_still_imports(plugin):
+    plugin.panel.on_message({"type": "save_config", "config": _schema_1_library()})
+    saved = json.loads(plugin.insert._saved)
+    assert saved["schema"] == 2 and saved["nuts"][0]["flat"]["width"] == [5.65, 5.85]
+    assert saved["heatset"]["profiles"][0]["insert_key"] == "M3x5.7"
+    assert plugin.panel.posted[-1]["type"] != "error"
+
+
 def test_pages_are_self_contained():
     for html in (nut_inserter.PANEL_HTML, nut_inserter.PREVIEW_HTML):
         assert html.lstrip().startswith("<!doctype html>")
@@ -276,9 +299,11 @@ def test_pages_are_self_contained():
 def test_only_the_plugin_package_imports_orca():
     from pathlib import Path
 
-    core = Path(library.__file__).parent
-    for source in core.rglob("*.py"):
-        assert "import orca" not in source.read_text(), source
+    import heatsetcore
+
+    for core in (Path(library.__file__).parent, Path(heatsetcore.__file__).parent):
+        for source in core.rglob("*.py"):
+            assert "import orca" not in source.read_text(), source
 
 
 def test_permissions_are_requested_once_at_load():

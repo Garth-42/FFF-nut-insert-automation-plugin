@@ -34,11 +34,11 @@ def detect(snapshot: ModelSnapshot, config: dict | library.Library) -> Report:
         for ii, inst in enumerate(obj.instances, start=1):
             meshes = [bed_mesh(part, inst) for part in obj.parts]
             # Walls are the parts that print. Modifiers, support blockers and the like
-            # are not plastic, so they are not walls.
+            # are not plastic, so they are not walls; nor are nut and heat-set insert bodies.
             host_parts = [m.corners() for m, part, is_nut
                           in zip(meshes, obj.parts, nut_parts, strict=True)
-                          if not is_nut and part.kind in ("part", "unknown")
-                          and len(m.triangles)]
+                          if not is_nut and not naming.looks_like_insert(part.name)
+                          and part.kind in ("part", "unknown") and len(m.triangles)]
             host = np.concatenate(host_parts) if host_parts else np.zeros((0, 3, 3))
             for pi, (part, mesh, is_nut) in enumerate(
                     zip(obj.parts, meshes, nut_parts, strict=True), start=1):
@@ -127,7 +127,7 @@ def preview_edges(snapshot: ModelSnapshot, limit: int = MAX_EDGE_SEGMENTS) -> li
     segments, angles = [], []
     for obj in snapshot.objects:
         for part in obj.parts:
-            if naming.looks_like_nut(part.name):
+            if naming.looks_like_nut(part.name) or naming.looks_like_insert(part.name):
                 continue
             local, angle = feature_edges(part.vertices, part.triangles)  # once per part
             if len(local) == 0:

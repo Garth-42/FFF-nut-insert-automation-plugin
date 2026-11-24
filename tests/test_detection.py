@@ -257,6 +257,16 @@ def test_modifiers_that_are_not_nuts_are_not_walls():
     assert codes(n) == ["E_NO_POCKET"]
 
 
+def test_heat_set_insert_bodies_are_not_walls_and_not_nuts():
+    """Until insert detection exists, a HEATSET_ body is left alone: no record, no wall."""
+    from builders import part
+
+    insert = part("HEATSET_M3x5.7", box((4.6, 4.6, 5.7), (1.0, 0, NUT_Z)))   # cuts the nut
+    report = run([pocket_block(), nut(centre=(0, 0, NUT_Z)), insert])
+    (n,) = report.nuts
+    assert (n.name, n.status, n.findings) == ("NUT_M3SQ", "ok", [])
+
+
 def test_nut_body_with_a_round_hole_and_many_facets():
     """A real nut model: the probe found 5,818 triangles in Garth's NUT_M3SQ body."""
     import time
