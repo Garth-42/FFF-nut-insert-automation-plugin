@@ -14,6 +14,7 @@ from nutcore.mesh import (
     make_snapshot,
     rotation,
 )
+from nutcore.report import NutRecord
 
 _CUBE = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (-0.5, 0.5) for z in (-0.5, 0.5)])
 # Corner index = 4x + 2y + z. Two triangles per side, wound to face outward.
@@ -109,6 +110,22 @@ def v_slot(gap_plus_y=0.1, gap_minus_y=0.1, thickness=2.1, opening=8.08, roof_z=
                          (0, sign * (opening / 2 + 1.5), (roof_z - 1.5) / 2)))
     boxes.append(box((thickness + 6, 14, 1), (0, 0, roof_z + 0.5)))
     return part(name, merge(boxes))
+
+
+def sample_record():
+    """The nut record the plugin reported in Orca for tests/data/sample.gcode.
+
+    Garth's export from OrcaSlicer 2.5.0 (Voron 2.4, Klipper, 0.2 mm layers) of a block
+    with one roofed pocket, 5.8 x 5.8 x 2.0, floor at Z 1.0 and roof at Z 3.0.
+    """
+    return NutRecord(
+        index=1, object=1, instance=1, part=1, name="NUT_M3SQ", key="M3SQ", cls="FLAT",
+        axis=[0, 0, 1], yaw_deg=0.0, tilt_deg=0.0, body_size=[5.5, 5.5, 1.8],
+        placement=[164.706, 158.320, 1.9], z_low=1.0, z_high=2.8, roof_z=3.0,
+        pocket={"width": [5.8, 5.8], "thickness": None, "depth": 2.0, "seat_gaps": [0.0]},
+        box={"centre": [164.706, 158.320, 2.0], "axes": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+             "half": [2.9, 2.9, 1.0]},
+        window=[2.9, 3.0])
 
 
 def snapshot(parts, instance_matrices=None):

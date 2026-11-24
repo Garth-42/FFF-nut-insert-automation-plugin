@@ -1,7 +1,8 @@
 # Heat-set inserts: plan
 
-Nov 24, 2026 · revision 3: RepRapFirmware first, after your answers and
-`docs/HEATSET_GCODE_SPEC.md`. Nothing here is built yet.
+Nov 24, 2026 · revision 4: RepRapFirmware first, after your answers and
+`docs/HEATSET_GCODE_SPEC.md`. Milestone 0 is built (wheel 0.2.4); the heat-set work itself is
+not started.
 
 ## Summary
 
@@ -27,6 +28,9 @@ What changed since revision 1:
 | Topic | Decision | Source |
 | --- | --- | --- |
 | Firmware | RepRapFirmware first. Klipper follows the same routine later | Your answer, 24 Nov. The spec said Klipper first |
+| Printer | RepRapFirmware 3.6, standalone: meets the 3.6.0 the design needs | Your answer, 24 Nov |
+| RRF calls | The letters and file names in the table under "Emitted lines" | Approved 24 Nov |
+| Block placement | After the layer's retract, wipe and object-end label, for heat-set and nut blocks. Nut blocks moved in wheel 0.2.4 | Approved 24 Nov; DECISIONS.md #39 |
 | Body name | `HEATSET_<key>`, where key is the profile's `insert_key`, for example `HEATSET_M3x5.7` | Your answer, 24 Nov. The spec said `HSI_<key>` |
 | Insert height | `z_top` is the top of the modelled body, snapped to the top of the layer that prints it. To be checked later against the hole's rim | Your answer, 24 Nov |
 | When | `after_layer` by default: right after the layer that prints `z_top`. `end_of_print` stays available | Your answer, 24 Nov. The spec's default was `end_of_print` |
@@ -57,10 +61,10 @@ reference, read on 24 Nov.
 
 **What it needs:**
 
-- **RepRapFirmware 3.6.0 or later.** `G38.x F` (a probing speed per move) arrived in 3.6.0. Without
-  it, every G38 move runs at the probe's one `M558` speed, but the pad probe (2.0 mm/s), the push
-  (0.5 mm/s) and the press (1.0 mm/s) need three. Macro parameters and variables need 3.3, and
-  `T T{expression}` needs 3.4.
+- **RepRapFirmware 3.6.0 or later**, which your printer runs (3.6, standalone). `G38.x F` (a
+  probing speed per move) arrived in 3.6.0. Without it, every G38 move runs at the probe's one
+  `M558` speed, but the pad probe (2.0 mm/s), the push (0.5 mm/s) and the press (1.0 mm/s) need
+  three. Macro parameters and variables need 3.3, and `T T{expression}` needs 3.4.
 - **Abort becomes a pause.** RRF's `abort` ends the whole print, so the spec's abort (stay in place,
   throat to standby, pause with a message) is `M568 P<tool> A1`, `M291` and `M226`.
 - **Preheat without selecting the tool:** `M568 P<tool> S<temp> A2` heats the heat-set tool to its
@@ -134,8 +138,10 @@ matter for Klipper.
 
 ## Found in a real Orca export
 
-`tests/data/sample.gcode` was exported from OrcaSlicer 2.5.0 with the Klipper flavor. An export with
-your RRF printer profile is needed to confirm each point for RRF (milestone 0).
+`tests/data/sample.gcode` was exported from OrcaSlicer 2.5.0 with the Klipper flavor. No export
+with your RRF printer profile is available yet. Until there is one, the rules are tested on this
+file and on variants made from it: comment labels only, which is how RRF reads labels, and M486
+labels. A real RRF export should confirm them when you can make one.
 
 1. **Blocks would run inside an object label.** Orca ends a layer like this: the last extrusion,
    `; stop printing object ...`, `;LAYER_CHANGE`, then the retract, the wipe and, for Klipper,
@@ -146,13 +152,11 @@ your RRF printer profile is needed to confirm each point for RRF (milestone 0).
    the Klipper label. If that object is cancelled mid-print, the routine's moves are dropped while
    its macros still run. `insert_start.g`'s skip only covers the insert's own object.
 
-   **Proposal:** place every block after the retract and wipe that follow the layer's last
-   extrusion, and after any label that ends an object (`; stop printing object`, `M486 S-1`,
-   `EXCLUDE_OBJECT_END`). Place it before the first move that changes Z or extrudes, and before any
-   label that starts an object. The print tool has then retracted and wiped, and no object is
-   current. `end_of_print` uses the same rule, which lands before the end G-code. This is
-   recommended for nut blocks too. It changes the `insert_nut.g` contract from "not retracted" to
-   "retracted and wiped", so that part is your call.
+   **Done:** every block goes after the retract and wipe that follow the layer's last extrusion,
+   and after any label that ends an object (`; stop printing object`, `M486 S-1`,
+   `EXCLUDE_OBJECT_END`), before anything that starts the next layer or the end G-code. The print
+   tool has then retracted and wiped, and no object is current. `nutcore/gcode/place.py` does
+   this for nut blocks since wheel 0.2.4 (DECISIONS.md #39), and heat-set blocks will use it too.
 2. **Preheat can use the slicer's time estimate.** The sample has 134 lines of
    `M73 P<percent> R<minutes left>`, and RRF supports `M73 R`. `preheat.g` goes at the last `M73`
    line whose R exceeds the R at the block by at least `preheat_lead`, rounded up to whole minutes.
@@ -171,21 +175,20 @@ your RRF printer profile is needed to confirm each point for RRF (milestone 0).
 
 ## Still open
 
-1. **RRF version:** which RepRapFirmware version does the printer run, and is it standalone or
-   with a single-board computer? The design needs 3.6.0 or later.
-2. **The RRF letters and file names** in the table above: approve, or change?
-3. **Block placement** as in finding 1, for heat-set blocks. And for nut blocks?
-4. **Orientation.** An insert whose axis is not vertical with the open end up: a warning and no
+1. **Orientation.** An insert whose axis is not vertical with the open end up: a warning and no
    insert (your integration plan), or an export refusal (the spec's rule 7)? Proposal: a warning
    when the body's orientation is wrong; a refusal when a vertical hole's surrounding surface is
    not flat, because the pad cannot probe or press there.
-5. **Magazine capacity.** Rule 9 needs a number. Add `magazine_capacity` to the profile, marked TBD?
-6. **Hold-down rule.** Proposal: two TBD profile values, a minimum bed contact area in mm² and a
+2. **Magazine capacity.** Rule 9 needs a number. Add `magazine_capacity` to the profile, marked TBD?
+3. **Hold-down rule.** Proposal: two TBD profile values, a minimum bed contact area in mm² and a
    maximum of height ÷ √area. Warn when a part fails either.
-7. **Temperature order:** the profile value; else the print temperature plus `insert_temp_offset`
+4. **Temperature order:** the profile value; else the print temperature plus `insert_temp_offset`
    (new, default +15 °C); else your filament table. Is that right?
-8. **Insert errors and `on_error`:** does `on_error: skip` apply to inserts (leave the insert out
+5. **Insert errors and `on_error`:** does `on_error: skip` apply to inserts (leave the insert out
    and name it in a comment), or does any insert error refuse the export, as the spec says?
+
+Not a question, for later: an Orca export of a test part with your RRF printer profile, saved as
+`tests/data/sample_rrf.gcode`, to confirm the placement rules on real RRF output.
 
 ## Architecture
 
@@ -258,7 +261,7 @@ For each `HEATSET_` body, per copy on the plate:
    is `E_BODY_SIZE`. The axis line runs through the area-weighted centre of the cap triangles.
 2. **Class.** `UPRIGHT` when the axis is within `axis_tolerance_deg` of vertical and the hole opens
    upward at its rim. `INVERTED` when the hole's top end is a ceiling and it opens downward. `TILTED`
-   otherwise. How the last two are reported is open question 4.
+   otherwise. How the last two are reported is open question 1.
 3. **Hole axis and diameter.** From five points along the body's axis, cast 16 rays outward from
    each. Fit a circle to the hits by least squares, then cast again from the fitted centre. The
    centre is the hole axis and gives X and Y; a body modelled off-centre is placed in the hole's
@@ -297,7 +300,7 @@ The axis and a two-pass hole fit took under 10 ms together, well inside the 100 
 | 7, depth | Blind hole shallower than `insert_length + hole_extra_depth` | Error | `E_DEPTH` |
 | 7, wall | Wall thinner than `min_wall` | Error | `E_WALL` (new) |
 | 7, surface | Surface around the hole not facing +Z within 0.5° | Error | `E_SURFACE` (new) |
-| 7, orientation | Axis not vertical, or the hole opens downward | Open question 4 | `W_TILTED`, `W_INVERTED` (new) |
+| 7, orientation | Axis not vertical, or the hole opens downward | Open question 1 | `W_TILTED`, `W_INVERTED` (new) |
 | 7, empty hole | Plastic printed in the hole (export) | Error | `E_POCKET_NOT_EMPTY` |
 | 8, keep-out | Something printed in a tool footprint before the block (export) | Error | `E_KEEP_OUT` (new), naming the blocked side |
 | 9, magazine | More inserts in the print than the magazine holds | Error | `E_MAGAZINE` (new) |
@@ -359,12 +362,12 @@ and the checks. In addition:
 | H17 | A lid over the hole with a gap | ok, `N_COVERED` |
 | H18 | 720-facet knurled body in a 256-facet hole | ok, under 100 ms |
 | H19 | Plain, bored and knurled bodies, and length equal to diameter, each tilted | Axis found every time |
-| P1 | RRF export, one insert, a nut pocket used as the hole | Header before the first object label; block after the layer's retract, wipe and object-end label |
-| P2 | RRF export, `end_of_print` | Block after the last object-end label, before the end G-code |
-| P3 | RRF export, `preheat_lead` 120 s | `preheat.g` at the last `M73` whose R is at least 2 above the block's |
+| P1 | RRF variant, one insert, the nut pocket used as the hole | Header before the first object label; block after the layer's retract, wipe and object-end label |
+| P2 | RRF variant, `end_of_print` | Block after the last object-end label, before the end G-code |
+| P3 | RRF variant, `preheat_lead` 120 s | `preheat.g` at the last `M73` whose R is at least 2 above the block's |
 | P4 | P3 with the `M73` lines removed | Preheat `preheat_layers` layers earlier |
 | P5 | No object labels | Block after the retract and wipe, before the next layer's first Z move |
-| P6 | RRF export | `O"..."` holds the label of the object around the insert |
+| P6 | RRF variant | `O"..."` holds the label of the object around the insert |
 | P7 | Plastic in the hole; then only the hole's own perimeter | `E_POCKET_NOT_EMPTY`; then ok |
 | P8 | `end_of_print`, a taller wall within `block_r` | `E_KEEP_OUT`, naming the side |
 | P9 | Three inserts on one layer | One block, nearest-neighbour order from the last toolhead position |
@@ -385,11 +388,11 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 
 | Milestone | Build | Done when |
 | --- | --- | --- |
-| 0. RRF ground work | An RRF dry-run `insert_nut.g` (check the values, report them with `echo`, pause with `M226`), so nut insertion can be dry-run on your printer now. Ask you for an Orca export of a test part with your RRF printer profile | Macro test keeps it in step with the nut RRF template; the export saved as `tests/data/sample_rrf.gcode` |
+| 0. RRF ground work (done, 0.2.4) | The RRF dry-run `macros/reprapfirmware/insert_nut.g` (check the values, report them, pause with `M226`), and nut blocks moved outside object labels (`nutcore/gcode/place.py`) | Its test keeps it in step with the nut RRF template; placement tests on the real export and its RRF variants (`tests/test_place.py`) |
 | 1. Profile | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library |
 | 2. Routine math | `routine.py` | Derived values, push + L = Li + e, the heights table |
 | 3. RRF emitter | `emit.py`, RRF template set | The RRF golden file byte for byte; rehearse differs only in the mode value |
-| 4. Placement | `place.py`, export composition | P1–P13 on the RRF export, using hand-made insert records |
+| 4. Placement | `place.py`, export composition | P1–P13 on the RRF variants of the real export, using hand-made insert records |
 | 5. Checks | `insert.py`, `hole.py`, `checks.py` | H1–H19 |
 | 6. Plugin and pages | State, gate, export, panel section, tab footprints | Plugin cases pass; wheel 0.3.0 builds |
 | 7. RRF macros | `macros/heatset/*.g` and `limits.g` | Every macro runs in rehearse mode on the printer; `M37` simulation of a whole file where it helps |

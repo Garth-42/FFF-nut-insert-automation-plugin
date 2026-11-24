@@ -222,24 +222,15 @@ def test_parser_tracks_modes_tools_and_arcs():
 def test_real_sample_from_orca():
     """tests/data/sample.gcode: Garth's export from OrcaSlicer 2.5.0 (Voron 2.4, Klipper,
     0.2 mm layers) of a block with one roofed pocket, the nut body set to Modifier.
-
-    The record is what the plugin reported in Orca for that part: pocket 5.8 x 5.8 x 2.0
-    with its floor at Z 1.0 and its roof at Z 3.0.
     """
     from pathlib import Path
 
-    from nutcore.report import NutRecord, Report
+    from builders import sample_record
+    from nutcore.report import Report
 
     text = (Path(__file__).parent / "data" / "sample.gcode").read_bytes().decode(
         "utf-8", "surrogateescape")
-    record = NutRecord(
-        index=1, object=1, instance=1, part=1, name="NUT_M3SQ", key="M3SQ", cls="FLAT",
-        axis=[0, 0, 1], yaw_deg=0.0, tilt_deg=0.0, body_size=[5.5, 5.5, 1.8],
-        placement=[164.706, 158.320, 1.9], z_low=1.0, z_high=2.8, roof_z=3.0,
-        pocket={"width": [5.8, 5.8], "thickness": None, "depth": 2.0, "seat_gaps": [0.0]},
-        box={"centre": [164.706, 158.320, 2.0], "axes": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-             "half": [2.9, 2.9, 1.0]},
-        window=[2.9, 3.0])
+    record = sample_record()
     result = run(text, Report(nuts=[record]), firmware="auto", flavor="klipper")
     assert result.status == "success", result.message
     export = result.report.nuts[0].export
@@ -250,13 +241,32 @@ def test_real_sample_from_orca():
     assert lines[at + 1] == ("INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 "
                              "Z_LOW=1.000 YAW=0.00 FEEDER=1 TOOL=-1")
     assert lines[at + 2] == END
-    assert ";Z:3.2" in lines[at + 3:at + 8]            # the block closes the layer at Z 3.0
+    # The block closes the layer at Z 3.0: after its retract, its wipe and the label that
+    # ends the object, and before the next layer's label and moves (DECISIONS.md #39).
+    assert lines[at - 1] == "EXCLUDE_OBJECT_END NAME=Configuration_1.step_id_0_copy_0"
+    assert ";Z:3.2" in lines[at - 16:at] and lines[at + 3] == ";AFTER_LAYER_CHANGE"
     assert lines[8].startswith("; NUT_INSERT_SUMMARY")  # right after ; HEADER_BLOCK_END
     # The same file with the pocket claimed somewhere solid must fail the proof.
     record.placement = [150.0, 150.0, 1.9]
     record.box = dict(record.box, centre=[150.0, 150.0, 2.0])
     solid = run(text, Report(nuts=[record]), firmware="klipper")
     assert solid.status == "failure" and "E_POCKET_NOT_EMPTY" in export_codes(solid)
+
+
+def test_reprapfirmware_dry_run_macro_reads_every_value_the_template_sends():
+    """macros/reprapfirmware/insert_nut.g must stay in step with the RRF template."""
+    import re
+    from pathlib import Path
+
+    template = library.default_config()["settings"]["templates"]["reprapfirmware"]
+    called = re.match(r'M98 P"([^"]+)"', template).group(1)
+    sent = set(re.findall(r'\s([A-Z])(?=["{])', template)) - {"P"}
+    macro = (Path(__file__).parents[1] / "macros" / "reprapfirmware" / called).read_text()
+    read = set(re.findall(r"param\.([A-Z])\b", macro))
+    assert sent == read == {"K", "C", "X", "Y", "Z", "L", "A", "F", "S"}
+    # RepRapFirmware takes at most 256 characters in one command.
+    assert all(len(line) < 256 for line in macro.splitlines())
+    assert "M226" in macro and "abort" in macro
 
 
 def test_klipper_dry_run_macro_reads_every_value_the_template_sends():

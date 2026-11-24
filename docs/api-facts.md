@@ -129,6 +129,9 @@ INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 Z_LOW=1.000 YAW=0.00 
 ;Z:3.2
 ```
 
+Since wheel 0.2.4 the block goes further down, after the layer's retract, wipe and
+`EXCLUDE_OBJECT_END`, so that it is outside the object's label (DECISIONS.md #39).
+
 - This is line for line what the export logic produced offline on the first file. Apart
   from these lines the two exports differ only in the settings named below.
 - **No permission prompt at export.** Reading and writing `ctx.gcode_path` needs no grant.

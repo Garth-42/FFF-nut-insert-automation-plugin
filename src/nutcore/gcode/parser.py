@@ -27,11 +27,18 @@ class Parsed:
     seg_extruding: np.ndarray   # (K,) True when E grows while X or Y changes
     line_tool: np.ndarray       # (L,) active tool after each line, -1 if none seen
     line_pos: np.ndarray        # (L, 3) nozzle position after each line
+    line_de: np.ndarray         # (L,) E change made by each line: < 0 retracts, 0 when none
 
     @property
     def extruding(self) -> np.ndarray:
         """The extruding pieces only: (segments, line indices)."""
         return self.seg[self.seg_extruding], self.seg_line[self.seg_extruding]
+
+    @property
+    def last_extruding_line(self) -> int:
+        """Index of the last line that extrudes, or -1. After it comes only the end G-code."""
+        lines = self.seg_line[self.seg_extruding]
+        return int(lines.max()) if len(lines) else -1
 
 
 def parse(text: str) -> Parsed:
@@ -44,6 +51,7 @@ def parse(text: str) -> Parsed:
     seg, seg_line, seg_ext = [], [], []
     line_tool = np.full(len(lines), -1, dtype=np.int32)
     line_pos = np.zeros((len(lines), 3))
+    line_de = np.zeros(len(lines))
 
     for i, raw in enumerate(lines):
         code = raw.split(";", 1)[0].strip()
@@ -66,6 +74,7 @@ def parse(text: str) -> Parsed:
                 delta_e = 0.0
                 if "E" in words:
                     delta_e = words["E"] - e if absolute_e else words["E"]
+                    line_de[i] = delta_e
                     e = words["E"] if absolute_e else e + words["E"]
                 moved_xy = target[0] != pos[0] or target[1] != pos[1]
                 arc = number in (2, 3) and ("I" in words or "J" in words)
@@ -98,7 +107,7 @@ def parse(text: str) -> Parsed:
                   seg=np.array(seg, dtype=np.float64).reshape(-1, 6),
                   seg_line=np.array(seg_line, dtype=np.int64),
                   seg_extruding=np.array(seg_ext, dtype=bool),
-                  line_tool=line_tool, line_pos=line_pos)
+                  line_tool=line_tool, line_pos=line_pos, line_de=line_de)
 
 
 def _arc(start, end, i, j, clockwise) -> list[tuple]:

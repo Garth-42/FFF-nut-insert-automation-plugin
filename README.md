@@ -41,7 +41,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.3-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.4-py3-none-any.whl`.
 
 ## Try it without Orca
 
@@ -103,11 +103,13 @@ INSERT_NUT KEY=M3SQ CLASS=FLAT X=112.400 Y=87.250 Z=5.300 Z_LOW=4.400 YAW=30.00 
 ;NUT_INSERT_END
 ```
 
-The block starts with the print tool at the end of its last extrusion, hot and not
-retracted. Your macro (Klipper `INSERT_NUT`, RepRapFirmware `insert_nut.g`) or your
-own Marlin lines must retract and park the print tool, place the nut, and bring the
-print tool back to the same position, primed, with the positioning and extruder modes
-unchanged.
+The block comes after the layer's last extrusion, the slicer's retract and wipe, and
+the label that ends the object, so the print tool is hot and normally retracted, and no
+object label is open: cancelling an object mid-print cannot swallow the block's moves.
+Your macro (Klipper `INSERT_NUT`, RepRapFirmware `insert_nut.g`) or your own Marlin
+lines must park the print tool, place the nut, and bring the print tool back to the same
+position, undoing any retraction the macro adds itself, with the positioning and
+extruder modes unchanged. The slicer primes the print tool at the next layer as usual.
 
 X and Y are the pocket centre, Z is the centre of the seated nut and Z_LOW its lowest
 point, in bed coordinates as printed. YAW is the yaw of the flats (flat nut) or the
@@ -115,9 +117,13 @@ heading of the thread axis (nut on edge or corner). TOOL is the print tool that 
 active. Templates are editable in the panel; placeholders are listed there.
 
 Before the first real insert, run the file once with the macro replaced by a pause.
-For Klipper, [`macros/klipper/insert_nut_dry_run.cfg`](macros/klipper/insert_nut_dry_run.cfg)
-is that macro: it checks the values, reports them in the console and pauses, and RESUME
-continues the print. It has not been run on a printer yet.
+These macros check the values, report them in the console and pause; resuming continues
+the print. Neither has been run on a printer yet.
+
+- RepRapFirmware 3.6 or later: upload
+  [`macros/reprapfirmware/insert_nut.g`](macros/reprapfirmware/insert_nut.g) to `/sys/`.
+- Klipper: include
+  [`macros/klipper/insert_nut_dry_run.cfg`](macros/klipper/insert_nut_dry_run.cfg).
 
 ## The numbers are placeholders
 
@@ -132,7 +138,7 @@ src/nut_inserter/   the Orca plugin. adapter.py holds every orca.host call.
 probe/              single-file plugin that logs what Orca's plugin API exposes
 tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py
 docs/               SPEC, DECISIONS (deviations), api-facts, api-gaps, manual-test
-macros/             printer-side macros; so far a Klipper dry run of INSERT_NUT
+macros/             printer-side macros: dry runs of the nut insert for RRF and Klipper
 ```
 
 The data flow:

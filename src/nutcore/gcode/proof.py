@@ -8,6 +8,7 @@ import numpy as np
 
 from ..report import Finding, NutRecord, finding
 from .parser import Parsed
+from .place import block_after
 
 PROOF_RING = 2.0    # mm, band around the footprint that defines local layers
 PROOF_INSET = 0.2   # mm, shrink of the footprint for the empty-pocket test
@@ -132,10 +133,11 @@ def plan_pocket(parsed: Parsed, record: NutRecord, min_top_clearance: float,
         insert = int(clear[0]) if len(clear) else len(tops) - 1
     plan.layer, plan.layer_z = insert + 1, float(tops[insert])
 
-    # Insertion point: after the last extruding move in the file at or below the layer top.
+    # Insertion point: after the layer's last extrusion (the last extruding move in the file
+    # at or below the layer top), then past its retract, wipe and object label (place.py).
     all_seg, all_line = parsed.extruding
     at_or_below = all_line[all_seg[:, 5] <= plan.layer_z + Z_EPS]
-    plan.line = int(at_or_below.max())
+    plan.line = block_after(parsed, int(at_or_below.max()))
     if np.any(seg_line[layer_of > insert] <= plan.line):
         plan.findings.append(_print_order(label))   # the pocket is closed before that point
         return plan

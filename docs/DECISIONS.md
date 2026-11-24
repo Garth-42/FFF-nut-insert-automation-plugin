@@ -138,3 +138,23 @@ Each entry says what differs from the spec and why. Newest last.
     one `state` module, and with it the cached report, is shared by every load.
 38. **`on_unload` closes the panel and forgets the tab, and `broadcast` skips pages that
     no longer answer.** A second load would otherwise leave two panels and stale tabs.
+
+## RepRapFirmware first (24 Nov 2026)
+
+39. **Insert blocks go after the layer's retract, wipe and object label.** The spec puts a
+    block on the line after the layer's last extruding move. OrcaSlicer writes the layer's
+    object label comment, `;LAYER_CHANGE`, the retract, the wipe and, for Klipper,
+    `EXCLUDE_OBJECT_END` after that line, so the block ran inside the object's label with
+    the print tool not retracted. Klipper's exclude_object and RepRapFirmware's M486 skip
+    the moves of a cancelled object while it is current. Cancelling that object mid-print
+    would have dropped the macro's moves while its other commands still ran.
+    `gcode/place.py` now moves the block past the retract (an E move or a bare `G10`), the
+    wipe and any label that ends an object (`EXCLUDE_OBJECT_END`, `M486 S-1`,
+    `; stop printing object`). It stops before anything that starts the next layer (a Z
+    move, extrusion, a prime or `G11`, an object label, a tool change, a positioning or
+    extruder mode change), and after the last extrusion before anything but harmless lines,
+    so it never enters the end G-code. The macro contract changes with it: the print tool
+    is normally retracted when the block starts, and the macro undoes only the retraction it
+    adds itself. Agreed with Garth on 24 Nov 2026. The rules are tested on the real Klipper
+    export and on variants with comment labels only and with M486 labels; a real
+    RepRapFirmware export should confirm them.

@@ -83,10 +83,12 @@ with values from your own test prints.</p>
 <h2>Settings</h2>
 <div class="form" id="settings"></div>
 <details><summary>What your printer macro must do</summary>
-<p>The insert block starts with the print tool at the end of its last extrusion, hot and not
-retracted. Your macro (Klipper <code>INSERT_NUT</code>, RepRapFirmware <code>insert_nut.g</code>)
-or your Marlin lines must retract and park the print tool, place the nut, and bring the print tool
-back to the same position, primed, with the positioning and extruder modes unchanged.</p>
+<p>The insert block comes after the layer's last extrusion, the slicer's retract and wipe, and
+the label that ends the object: the print tool is hot and normally retracted, and no object label
+is open. Your macro (Klipper <code>INSERT_NUT</code>, RepRapFirmware <code>insert_nut.g</code>)
+or your Marlin lines must park the print tool, place the nut, and bring the print tool back to the
+same position, undoing any retraction the macro adds itself, with the positioning and extruder
+modes unchanged.</p>
 <p>Placeholders: {index} {key} {cls} {x} {y} {z} {z_low} {z_high} {yaw} {feeder} {layer_z}
 {tool} {rx} {ry} {rz}. Write a literal brace as {{ or }}.</p></details>
 

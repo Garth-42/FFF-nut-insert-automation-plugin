@@ -85,10 +85,13 @@ included, so expect to add it again after installing a newer wheel.
   Result:
 
 - [ ] **E, Dry run.** On the printer, run the file once with the insert macro replaced
-  by a pause, before the first real insert. For Klipper, include
-  `macros/klipper/insert_nut_dry_run.cfg`. Expect the print to pause after the layer
-  below the pocket roof, with one console line per nut giving its position, and RESUME
-  to continue cleanly from where the print tool left off.
+  by a pause, before the first real insert. For RepRapFirmware 3.6 or later, upload
+  `macros/reprapfirmware/insert_nut.g` to `/sys/` and set the firmware to
+  RepRapFirmware in the Nut panel (or let `auto` pick it from the G-code flavor). For
+  Klipper, include `macros/klipper/insert_nut_dry_run.cfg`. Expect the print to pause
+  after the layer below the pocket roof, with console lines per nut giving its position,
+  and resuming to continue cleanly from where the print tool left off. The block now
+  follows the layer's retract, wipe and object label (wheel 0.2.4 and later).
 
   Result:
 
