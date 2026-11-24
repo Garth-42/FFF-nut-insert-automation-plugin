@@ -49,3 +49,5 @@ RepRapFirmware comes first; Klipper later.
 - `probe/nut_api_probe.py` single-file plugin a person runs in Orca to settle open API questions.
 - `macros/heatset/` the RepRapFirmware 3.6 macros the heat-set G-code calls. `tests/test_heatset_macros.py`
   keeps them in step with `heatsetcore/emit.py`.
+- `firmware/klipper/` the Klipper commands the heat-set G-code calls. `tests/test_klipper_macros.py` runs
+  them in `tests/klipper_sim.py`, a stand-in for Klipper; with Klipper's `{ }` delimiters never write `{-`.

@@ -9,7 +9,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 306 tests pass on synthetic
+All seven milestones of the build brief are implemented. 349 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
@@ -20,9 +20,10 @@ finds bodies named `HEATSET_<key>`, checks their holes (diameter, depth, wall, s
 tilt, hold-down), gates the slice and writes the heat-set header, preheats and blocks into
 the exported G-code after the nut blocks. The panel has Heat-set and Machine settings tabs
 for the tool profile, and the Nuts tab draws each insert's tool footprints. Not yet tried
-in Orca. The RepRapFirmware macros the G-code calls are in
-[`macros/heatset/`](macros/heatset/README.md), with their install guide. They have not run
-on a printer: bring them up in rehearse mode first, as that guide says.
+in Orca. The heat-set profile's firmware picks the G-code: RepRapFirmware, whose macros are
+in [`macros/heatset/`](macros/heatset/README.md), or Klipper (wheel 0.4.0), whose commands
+are in [`firmware/klipper/`](firmware/klipper/README.md), each with its install guide.
+Neither has run on a printer: bring them up in rehearse mode first, as the guides say.
 
 In OrcaSlicer 2.5.0 (macOS) it has run end to end on one real part: a flat M3 square nut
 in a roofed pocket, Voron 2.4 profile, Klipper. The check, the docked panel, the Nuts
@@ -152,6 +153,7 @@ probe/              single-file plugin that logs what Orca's plugin API exposes
 tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py
 docs/               SPEC, DECISIONS (deviations), api-facts, api-gaps, manual-test
 macros/             printer-side macros: nut insert dry runs (RRF, Klipper), heat-set (RRF)
+firmware/klipper/   heat-set commands for Klipper, and their limits
 ```
 
 The data flow:

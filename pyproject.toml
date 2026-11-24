@@ -1,13 +1,17 @@
 [project]
 name = "nut-inserter"
-version = "0.3.0"
+version = "0.4.0"
 description = "OrcaSlicer 2.5 plugin that finds NUT_ bodies, checks their pockets and writes nut-insert commands"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["numpy"]
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = [
+    "jinja2>=3.1.6",
+    "pytest",
+    "ruff",
+]
 
 [build-system]
 requires = ["hatchling"]

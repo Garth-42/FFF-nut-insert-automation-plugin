@@ -17,8 +17,26 @@ from .place import SUCCESS, InsertSpec, PlaceResult, place
 UPRIGHT = "UPRIGHT"
 
 
+FIRMWARE_NAMES = {"reprapfirmware": "RepRapFirmware", "klipper": "Klipper"}
+
+
+def flavor_problem(prof: dict, flavor: str | None) -> str | None:
+    """The heat-set G-code calls the macros of the profile's firmware, so the printer
+    profile's G-code flavor must be that firmware. No flavor known: no check."""
+    if not flavor:
+        return None
+    text = str(flavor).lower()
+    found = "klipper" if "klipper" in text else "reprapfirmware" if "reprap" in text else None
+    if found == prof["firmware"]:
+        return None
+    return (f"heat-set profile {prof.get('name')!r} writes "
+            f"{FIRMWARE_NAMES.get(prof['firmware'], prof['firmware'])} commands, but the printer "
+            f"profile's G-code flavor is {flavor}. Set the firmware in the Nut panel's Machine "
+            "settings tab")
+
+
 def export(text: str, records, lib: Library, *, version: str = "",
-           filament_type: str | None = None) -> PlaceResult:
+           filament_type: str | None = None, flavor: str | None = None) -> PlaceResult:
     """Place the heat-set inserts among records (any kind) in the G-code text."""
     heat = [r for r in records if r.kind == "heatset"]
     if not heat:
@@ -41,6 +59,10 @@ def export(text: str, records, lib: Library, *, version: str = "",
                                     bottom_z=r.pocket["bottom_z"]))
             keys.append(r.key)
     prof = _profile(lib, keys or [r.key for r in heat])
+    problem = flavor_problem(prof, flavor) if specs else None
+    if problem:
+        refused += [(spec.label, "E_PROFILE", f"{spec.label}: {problem}.") for spec in specs]
+        specs = []
     return place(text, specs, prof, on_error=lib.settings.on_error, version=version,
                  filament_type=filament_type, refused=refused, by_hand=by_hand)
 

@@ -272,7 +272,8 @@ def export(ctx):
     has_inserts = any(n.kind == "heatset" for n in current.nuts)
     heat = heatset_export.export(nuts.text, current.nuts, lib, version=nutcore.__version__,
                                  filament_type=_first_filament(
-                                     adapter.config_value(ctx, "filament_type")))
+                                     adapter.config_value(ctx, "filament_type")),
+                                 flavor=flavor)
     if has_inserts:
         info = heatset_export.export_info(heat)
         for n in current.nuts:

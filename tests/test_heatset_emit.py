@@ -121,7 +121,65 @@ def test_every_speed_comes_from_the_profile():
     assert 'M98 P"heatset/push.g" D5.400 V0.7 W2.0 C3' in lines
 
 
-def test_klipper_comes_later():
+# --- Klipper: the spec's own templates and worked example -----------------------------------
+
+GOLDEN_KLIPPER = Path(__file__).parent / "data" / "heatset_golden_klipper.gcode"
+
+
+def test_klipper_golden_file_byte_for_byte():
+    """The spec's worked example, with _HS_PUSH_TICK on its 26 lines."""
     p = example_profile(firmware="klipper")
-    with pytest.raises(NotImplementedError, match="milestone 9"):
-        emit.block_lines(p, example_block(p), 245.0)
+    text = "\n".join(emit.block_lines(p, example_block(p), 245.0)) + "\n"
+    assert text == GOLDEN_KLIPPER.read_text(encoding="utf-8")
+    assert text.count("_HS_PUSH_TICK\n") == routine.derived(p)["ticks"] == 26
+
+
+def test_klipper_header_and_preheat():
+    p = example_profile(firmware="klipper")
+    lines = emit.header_lines(p, total_inserts=1, temp=245.0, version="0.3.0")
+    assert lines[-2:] == [
+        "HEATSET_CONFIG KEY=M3x5.7 TOOL=3 PAD_DROP=0.400 TRIP_OVERTRAVEL=0.000 "
+        "SURFACE_TOL=0.500 TEMP_WINDOW=5 ON_PROUD=warn MODE=normal REHEARSE_LIFT=10.000",
+        "HEATSET_REQUIRE KEY=M3x5.7 COUNT=1 TEMP=245"]
+    assert emit.preheat_line(p, 232.5) == "HEATSET_PREHEAT TEMP=232.5"
+
+
+def test_klipper_rehearse_differs_only_in_the_mode():
+    def whole(p):
+        return emit.header_lines(p, 1, 245.0, "0.3.0") + emit.block_lines(
+            p, example_block(p), 245.0)
+
+    normal = whole(example_profile(firmware="klipper"))
+    rehearse = whole(example_profile(firmware="klipper", mode="rehearse"))
+    changed = [(a, b) for a, b in zip(normal, rehearse, strict=True) if a != b]
+    assert len(changed) == 2 and changed[0] == ("; mode = normal", "; mode = rehearse")
+    config, rehearsed = changed[1]
+    assert config.startswith("HEATSET_CONFIG ")
+    assert rehearsed == config.replace("MODE=normal", "MODE=rehearse")
+
+
+def test_klipper_without_unsheath_and_with_two_inserts():
+    p = example_profile(firmware="klipper", proud_after_hot=0.8, mouth_gap=0.8)
+    inserts = (emit.Insert("bracket_1", 120.0, 80.0, 12.4),
+               emit.Insert("bracket_1", 140.0, 80.0, 12.4))
+    lines = emit.block_lines(p, example_block(p, inserts), 245.0)
+    assert lines[1] == "HEATSET_BEGIN KEY=M3x5.7 TEMP=245 Z_SAFE=17.400 COUNT=2"
+    assert not any(x.startswith("HEATSET_UNSHEATH") for x in lines)
+    assert sum(x == "HEATSET_INSERT_DONE" for x in lines) == 2 and lines[-1] == "HEATSET_END"
+
+
+LABEL = "Configuration_1.step_id_0_copy_0"     # an Orca EXCLUDE_OBJECT name
+
+
+@pytest.mark.parametrize(("name", "value"), [
+    ("bracket_1", "bracket_1"), (LABEL, LABEL), ("my part", "'my part'"),
+    ("a;b#c*d", "a_b_c_d"), ("it's", "'it'\"'\"'s'"), ("", "")])
+def test_klipper_object_names_survive_its_parser(name, value):
+    """Klipper reads parameters up to #, * or ;, then splits them with shlex."""
+    import shlex
+
+    assert emit.klipper_value(name) == value
+    if name:
+        line = f"HEATSET_INSERT_START OBJECT={emit.klipper_value(name)} X=1"
+        assert dict(a.split("=", 1) for a in shlex.split(line.split(" ", 1)[1]))["OBJECT"] == (
+            name.replace(";", "_").replace("#", "_").replace("*", "_"))

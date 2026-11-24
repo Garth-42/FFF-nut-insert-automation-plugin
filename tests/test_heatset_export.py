@@ -137,3 +137,25 @@ def test_a_second_profile_in_one_print_is_refused(on_error):
     else:
         assert result.status == "success" and result.left_out[0][:2] == (
             "HEATSET_M4x8 #2", "E_PROFILE")
+
+
+@pytest.mark.parametrize(("firmware", "flavor", "ok"), [
+    ("reprapfirmware", "reprapfirmware", True), ("klipper", "klipper", True),
+    ("reprapfirmware", "klipper", False), ("klipper", "marlin2", False),
+    ("reprapfirmware", None, True)])
+def test_the_profile_firmware_must_match_the_gcode_flavor(firmware, flavor, ok):
+    cfg = config(firmware=firmware)
+    result = run(records(cfg=cfg), cfg, flavor=flavor)
+    assert (result.status == "success") == ok, result.message
+    if not ok:
+        assert "flavor is " + flavor in result.message and "Machine settings" in result.message
+        assert result.text == gcode()
+
+
+def test_a_klipper_export_writes_klipper_lines():
+    cfg = config(firmware="klipper")
+    result = run(records(cfg=cfg), cfg, flavor="klipper")
+    out = result.text.splitlines()
+    assert "HEATSET_REQUIRE KEY=M3x5.7 COUNT=1 TEMP=225" in out
+    assert "HEATSET_INSERT_START INDEX=1 OBJECT= X=112.400 Y=87.250 Z_TOP=10.000" in out
+    assert not any(x.startswith("M98 ") for x in out)

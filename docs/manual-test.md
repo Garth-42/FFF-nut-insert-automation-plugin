@@ -131,6 +131,14 @@ included, so expect to add it again after installing a newer wheel.
 
   Result:
 
+- [ ] **I, Heat-set on Klipper, rehearse mode** (wheel 0.4.0, if the tool goes on a
+  Klipper printer). Install `firmware/klipper/` as its README says, set the profile's
+  firmware to Klipper and its mode to Rehearse, export a coupon with one insert and print
+  it. Expect the same as check H, and `insert 1 rehearsed` in the console. Then work through
+  the README's bring-up checks and note each result here.
+
+  Result:
+
 ## If something does not work
 
 The plugin has only run against a stand-in `orca` module. If Orca rejects a call, the

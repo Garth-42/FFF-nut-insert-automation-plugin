@@ -1,12 +1,15 @@
 """The emitted G-code: header, preheat line and blocks, one template set per firmware.
 
-docs/HEATSET_GCODE_SPEC.md, "Emitted G-code". RepRapFirmware comes first, as
+docs/HEATSET_GCODE_SPEC.md, "Emitted G-code". RepRapFirmware came first, as
 docs/heatset-plan.md ("RepRapFirmware design") sets out and Garth approved on 24 Nov 2026:
 each spec command is a macro call, M98 P"heatset/<name>.g", with single-letter parameters
 that avoid G, M, N, T, P (the spec's rule), R (M98's own) and A (the follower axis). The
 hot push is one call: the macro loops on the float itself, so nothing is unrolled. Speeds
-keep the spec's mm/s under V, apart from RRF's F in mm/min. Klipper's template set comes in
-milestone 9.
+keep the spec's mm/s under V, apart from RRF's F in mm/min.
+
+Klipper uses the spec's own templates ("Klipper templates"): the commands of
+firmware/klipper/heatset_macros.cfg with KEY=VALUE parameters, and the push unrolled into
+one _HS_PUSH_TICK line per tick, since a Klipper macro cannot loop on a sensor.
 
 Number formats are the spec's: X, Y, Z and other lengths with 3 decimals, F as a whole
 number in mm/min, speeds (mm/s) and times (s) with 1 decimal; never exponent form, never
@@ -15,6 +18,7 @@ a negative zero. Where to put the lines is placement's job (milestone 4).
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 
 from . import routine
@@ -79,6 +83,17 @@ def one_line(text) -> str:
 
 _ASCII = str.maketrans({"–": "-", "—": "-", "°": " deg", "²": "2", "÷": "/", "√": "sqrt ",
                         "×": "x"})
+
+
+def klipper_value(text) -> str:
+    """A Klipper command parameter value. Klipper ends a command's parameters at #, * or ;
+    and splits them with shlex, so those become _ and anything with a space is quoted."""
+    value = one_line(text)
+    for ch in "#*;":
+        value = value.replace(ch, "_")
+    if value and any(ch.isspace() or ch in "'\"\\" for ch in value):
+        value = shlex.quote(value)
+    return value
 
 
 def ascii_text(text) -> str:
@@ -170,12 +185,75 @@ def _rrf_block(p: dict, block: Block, temp: float) -> list[str]:
 _RRF = {"config": _rrf_config, "preheat": _rrf_preheat, "block": _rrf_block}
 
 
+# --- Klipper --------------------------------------------------------------------------------
+
+def _klipper_config(p: dict, total: int, temp: float) -> list[str]:
+    key = p["insert_key"]
+    return [
+        f"HEATSET_CONFIG KEY={key} TOOL={p['tool']} PAD_DROP={length(p['pad_drop'])} "
+        f"TRIP_OVERTRAVEL={length(p['trip_overtravel'])} SURFACE_TOL={length(p['surface_tol'])} "
+        f"TEMP_WINDOW={temperature(p['temp_window'])} ON_PROUD={p['on_proud']} "
+        f"MODE={p['mode']} REHEARSE_LIFT={length(p['rehearse_lift'])}",
+        f"HEATSET_REQUIRE KEY={key} COUNT={total} TEMP={temperature(temp)}",
+    ]
+
+
+def _klipper_preheat(p: dict, temp: float) -> str:
+    return f"HEATSET_PREHEAT TEMP={temperature(temp)}"
+
+
+def _klipper_block(p: dict, block: Block, temp: float) -> list[str]:
+    d = routine.derived(p)
+    n, key = len(block.inserts), p["insert_key"]
+    z_local = "SPEED=" + tenth(p["z_local_speed"])
+    out = [f"; HEATSET block {block.number}: {block.timing}, inserts={n}, key {key}",
+           f"HEATSET_BEGIN KEY={key} TEMP={temperature(temp)} Z_SAFE={length(block.z_safe)} "
+           f"COUNT={n}"]
+    for i, ins in enumerate(block.inserts, start=1):
+        m = routine.insert_moves(p, ins.x, ins.y, ins.z_top)
+        pad_over_hole = f"G0 X{length(m.pad_over_hole_x)} Y{length(m.pad_over_hole_y)}"
+        out += [
+            f"; insert {i}/{n} {one_line(ins.object)} X{length(ins.x)} Y{length(ins.y)} "
+            f"Ztop{length(ins.z_top)}",
+            f"HEATSET_INSERT_START INDEX={i} OBJECT={klipper_value(ins.object)} "
+            f"X={length(ins.x)} Y={length(ins.y)} Z_TOP={length(ins.z_top)}",
+            "G90",
+            f"G0 Z{length(block.z_safe)} F{feed(p['z_travel_speed'])}",           # 2 travel
+            f"{pad_over_hole} F{feed(p['xy_travel_speed'])}",
+            f"G0 Z{length(m.approach_z)} F{feed(p['z_local_speed'])}",             # 3 approach
+            f"HEATSET_PROBE SPEED={tenth(p['probe_speed'])}",                       # 4 probe
+            f"HEATSET_Z HEIGHT={length(p['local_clear'])} {z_local}",               # 5 line up
+            f"G0 X{length(ins.x)} Y{length(ins.y)} F{feed(p['xy_local_speed'])}",
+            f"HEATSET_Z HEIGHT={length(p['mouth_gap'])} {z_local}",
+            f"_HS_PUSH_START TOTAL={length(d['push'])} STEP={length(p['push_step'])} "  # 6 push
+            f"SPEED={tenth(p['push_speed'])} WAIT={tenth(p['resist_wait'])} "
+            f"MAXWAITS={p['resist_retries']}",
+            *["_HS_PUSH_TICK"] * d["ticks"],
+            "_HS_PUSH_END",
+        ]
+        if d["L"] > EPS:                                                           # 7 unsheath
+            out.append(f"HEATSET_UNSHEATH DIST={length(d['L'])} "
+                       f"SPEED={tenth(p['unsheath_speed'])}")
+        out += [
+            f"HEATSET_RETRACT DIST={length(p['follower_retract'])} "                # 8 retract
+            f"SPEED={tenth(p['retract_speed'])}",
+            f"HEATSET_Z HEIGHT={length(m.lift_height)} {z_local}",                  # 9 lift, swap
+            f"{pad_over_hole} F{feed(p['xy_local_speed'])}",
+            f"HEATSET_PRESS SPEED={tenth(p['press_speed'])} DWELL={tenth(p['press_dwell'])} "
+            f"TOL={length(p['flush_tol'])} GUARD={length(p['press_guard'])}",       # 10 press
+            f"HEATSET_Z HEIGHT={length(p['local_clear'])} {z_local}",               # 11 finish
+            "HEATSET_INSERT_DONE",
+        ]
+    out.append("HEATSET_END")
+    return out
+
+
+_KLIPPER = {"config": _klipper_config, "preheat": _klipper_preheat, "block": _klipper_block}
+TEMPLATES = {"reprapfirmware": _RRF, "klipper": _KLIPPER}
+
+
 def _templates(profile: dict) -> dict:
-    if profile["firmware"] == "reprapfirmware":
-        return _RRF
-    raise NotImplementedError(
-        f"the {profile['firmware']} heat-set G-code comes in milestone 9 "
-        "(docs/heatset-plan.md); set the heat-set profile's firmware to reprapfirmware")
+    return TEMPLATES[profile["firmware"]]
 
 
 # --- What placement calls -------------------------------------------------------------------

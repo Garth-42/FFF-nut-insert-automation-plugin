@@ -7,8 +7,10 @@ to 5: the routine math, the RRF emitter with its golden file, placement in a rea
 detection and checks (DECISIONS.md #46), and milestone 6 (wheel 0.3.0): the plugin finds
 inserts, gates the slice and writes the heat-set G-code at export, with the Heat-set and
 Machine settings tabs (DECISIONS.md #47). Milestone 7, the RepRapFirmware macros the
-G-code calls (`macros/heatset/`, DECISIONS.md #48), is written and checked statically but
-has not run on a printer: bring it up in rehearse mode first (milestone 8).
+G-code calls (`macros/heatset/`, DECISIONS.md #48), is written and checked statically, and
+milestone 9 (wheel 0.4.0) adds Klipper: the spec's templates and golden file, and the
+commands in `firmware/klipper/`, run in a stand-in for Klipper (DECISIONS.md #49). Neither
+firmware's macros have run on a printer: bring them up in rehearse mode first (milestone 8).
 
 ## Summary
 
@@ -386,7 +388,7 @@ and the checks. In addition:
 | P11 | `M109 S220`; `G10 P0 S220`; none and PETG; a profile value | `S235`; `S235`; `S245`; the profile value |
 | P12 | A file already processed | Left byte-identical |
 | P13 | Object name containing `"` | Doubled inside `O"..."` |
-| P14 | P1 to P5 on the Klipper export, `tests/data/sample.gcode` | The same positions (milestone 9) |
+| P14 | P1 to P5 on the Klipper export, `tests/data/sample.gcode` | The same positions (milestone 9, done) |
 | P15 | More inserts than `magazine_capacity` | `E_MAGAZINE`; with `on_error: skip`, the inserts past the capacity left out, and the pop-up |
 | P16 | An insert failing the empty-hole proof, `on_error: skip` | Left out with a comment; the other inserts written; the pop-up after the export |
 
@@ -410,7 +412,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #47) |
 | 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #48). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
 | 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
-| 9. Klipper | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` | The spec's Klipper golden file byte for byte; P14 |
+| 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` and `heatset_limits.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #49) |
 
 ## Later
 

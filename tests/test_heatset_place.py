@@ -6,6 +6,7 @@ sample's nut pocket, open from Z 1.0 to 3.0, stands in for a hole. Inserts are m
 hand until detection exists (milestone 5).
 """
 
+import difflib
 import re
 from pathlib import Path
 
@@ -236,3 +237,56 @@ def test_an_insert_with_nothing_printed_around_it_is_skipped_quietly():
     result = place.place(sample_text(), [far], measured())
     assert result.status == "success" and not result.changed
     assert result.inserts[0].findings[0].code == "N_NOT_ON_PLATE"
+
+
+# --- P14: the Klipper template set at the same positions ------------------------------------
+
+def insertion_points(original: str, result: str) -> list[tuple[int, int]]:
+    """(original line index, lines added there) for each place the result adds lines; it
+    must change nothing else."""
+    ops = difflib.SequenceMatcher(a=original.splitlines(), b=result.splitlines(),
+                                  autojunk=False).get_opcodes()
+    assert all(tag in ("equal", "insert") for tag, *_ in ops)
+    return [(i1, j2 - j1) for tag, i1, _, j1, j2 in ops if tag == "insert"]
+
+
+def _without_m73(text: str) -> str:
+    return "".join(x for x in text.splitlines(keepends=True) if not x.startswith("M73"))
+
+
+P14 = {
+    "P1 and P3, after_layer with M73": (lambda: sample_text(rrf=False), lambda: [insert()], {}),
+    "P2, end_of_print": (lambda: sample_text(rrf=False),
+                         lambda: [insert(x=150.0, y=150.0, z_top=12.2, bottom_z=12.2)],
+                         {"timing": "end_of_print"}),
+    "P4, no M73": (lambda: _without_m73(sample_text(rrf=False)), lambda: [insert()],
+                   {"preheat_layers": 2}),
+    "P5, no labels": (lambda: gcode_ring(roof_z=None, top_z=7.4),
+                      lambda: [ring_insert(*CENTRE)], {"insert_temp": 230.0}),
+}
+
+
+@pytest.mark.parametrize("case", P14)
+def test_p14_klipper_lines_go_where_the_rrf_lines_go(case):
+    make_text, make_inserts, change = P14[case]
+    text = make_text()
+    rrf = place.place(text, make_inserts(), measured(**change))
+    klipper = place.place(text, make_inserts(), measured(firmware="klipper", **change))
+    assert (rrf.status, klipper.status) == ("success", "success"), klipper.message
+    at_rrf, at_klipper = insertion_points(text, rrf.text), insertion_points(text, klipper.text)
+    assert [i for i, _ in at_rrf] == [i for i, _ in at_klipper]
+    out = lines(klipper)
+    assert sum(x.startswith("HEATSET_CONFIG KEY=M3x5.7 TOOL=3") for x in out) == 1
+    assert sum(x.startswith("HEATSET_PREHEAT TEMP=") for x in out) == 1
+    assert sum(x == "_HS_PUSH_TICK" for x in out) == 26
+    assert not any("M98 " in x for x in out[at_klipper[0][0]:])
+
+
+def test_p14_klipper_object_names_come_from_exclude_object():
+    result = place.place(sample_text(rrf=False), [insert()], measured(firmware="klipper"))
+    out = lines(result)
+    start = next(i for i, x in enumerate(out) if x.startswith("HEATSET_INSERT_START"))
+    assert out[start] == ("HEATSET_INSERT_START INDEX=1 OBJECT=Configuration_1.step_id_0_copy_0 "
+                          "X=164.706 Y=158.320 Z_TOP=3.000")
+    begin = next(i for i, x in enumerate(out) if x.startswith("HEATSET_BEGIN"))
+    assert out[begin - 2] == "EXCLUDE_OBJECT_END NAME=Configuration_1.step_id_0_copy_0"

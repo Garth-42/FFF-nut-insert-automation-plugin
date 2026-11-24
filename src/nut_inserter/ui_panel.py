@@ -233,7 +233,7 @@ Import, then Save.</p>
     ['name', 'Profile name', 'text'],
     ['tool', 'Tool number', 'int', 'T'],
     ['firmware', 'Firmware', 'select', [['reprapfirmware', 'RepRapFirmware'],
-      ['klipper', 'Klipper (not built yet)']]],
+      ['klipper', 'Klipper']]],
     ['magazine_capacity', 'Magazine capacity', 'int', 'inserts'],
     [null, 'Insert'],
     ['insert_key', 'Key (bodies named HEATSET_<key>)', 'text'],

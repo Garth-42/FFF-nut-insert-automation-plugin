@@ -364,3 +364,46 @@ Each entry says what differs from the spec and why. Newest last.
       needs axis A to be linear (`M584 ... R0`).
     - **Every insert is logged** to the console and `/sys/heatset/log.csv`.
     - **No LED.** The spec's amber LED is Klipper hardware; RRF warns with a message.
+
+## Heat-set inserts, milestone 9: Klipper (24 Nov 2026, wheel 0.4.0)
+
+49. **How the Klipper side is built.**
+    - **Emitter.** The spec's Klipper templates, word for word; the worked example is
+      `tests/data/heatset_golden_klipper.gcode`, taken from the spec with its 26
+      `_HS_PUSH_TICK` lines, and matched byte for byte. P14 runs P1–P5 on the Klipper export
+      and finds the lines inserted at the same places as for RepRapFirmware. Object names
+      have `#`, `*` and `;` replaced and are shell-quoted when they hold a space or a
+      quote, since Klipper ends parameters at `#` or `;` and splits them with shlex.
+    - **Firmware and flavor must agree.** An export whose printer profile's G-code flavor is
+      not the heat-set profile's firmware refuses every insert (`E_PROFILE`, naming both).
+      Not in the spec; it stops RRF macro calls from reaching a Klipper printer and back.
+    - **Macros: `firmware/klipper/heatset_macros.cfg`**, the path the spec gives, with the
+      limits and names apart in `heatset_limits.cfg` (`_HS_LIMITS`) so an update of the
+      macros does not overwrite them. The RRF macros stay under `macros/heatset/`.
+    - **A stopped insert lifts before it pauses.** The spec stays in place. But Klipper
+      cannot ask mid-print, and `RESUME` moves back to where the pause happened before the
+      print's own `G0` lines run, so `_HS_ABORT` sets the throat to standby, skips the rest
+      of the insert, lifts straight up to the block's safe height, and then pauses with the
+      configured pause that does not park. The RRF side asks first (#48).
+    - **Short magazine and cold throat pause without skipping**, as the spec says; the probe
+      checks both again before it moves, so resuming before fixing them stops that insert
+      instead of pushing cold or empty. Each insert sets the throat back to the insert
+      temperature, since a stopped insert leaves it at standby.
+    - **The throat wait is unrolled inside the macros:** `_HS_WAIT_TEMP` renders
+      `temp_settle` one-second `_HS_TEMP_TICK` calls, each of which renders when it runs, as
+      the G-code does for the push.
+    - **Axis A** is registered by `HEATSET_CONFIG` in normal mode, only when
+      `printer.gcode_move.axis_map` lacks it: Klipper refuses to register it twice. Klipper
+      times an extra axis by the XYZ part of a move, so the unsheath uses F = V × 60 (RRF:
+      × √2).
+    - **Saved variables:** `hs_count`, `hs_key` and `hs_pending` (the follower retract still
+      to take up), as the RRF side keeps them in `count.g`.
+    - **Tools** are selected with klipper-toolchanger's `T<n>`, the heat-set tool needing a
+      `tool_number`; the print tool comes back with `T<n>` or `UNSELECT_TOOL`, then
+      `RESTORE_GCODE_STATE`. The throat's standby temperature is `_HS_LIMITS.standby_temp`,
+      0 (off) by default.
+    - **A stand-in for Klipper in the tests** (`tests/klipper_sim.py`, jinja2 as a dev
+      dependency only) renders the macros with Klipper's own Jinja settings and runs the
+      plugin's G-code through them: a normal print, rehearse mode, every failure path. It
+      found `G1 A{-dist}`: with Klipper's `{ }` delimiters, `{-` is whitespace control, so
+      the retract rendered as `A0.3`, forwards. A test now bans `{-` and `-}`.
