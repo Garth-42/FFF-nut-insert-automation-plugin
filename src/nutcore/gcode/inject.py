@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..frame import PLACEABLE
 from ..library import Library
@@ -25,6 +25,9 @@ class InjectResult:
     text: str        # the G-code to write; the input text when nothing changed
     report: Report   # a copy of the report with `export` and the export findings filled in
     changed: bool = False   # True when `text` differs from the input and should be written
+    # Nuts left out because of an error: (label, finding code, message). With on_error
+    # "skip" they are named in comments; with "block" they are why the export failed.
+    left_out: list = field(default_factory=list)
 
 
 def inject(text: str, report: Report, lib: Library, flavor: str | None = None,
@@ -108,10 +111,11 @@ def inject(text: str, report: Report, lib: Library, flavor: str | None = None,
                          "after_line": plan.line + 1}
         planned.append((record, plan, lines))
 
+    left_out = [(record.label, f.code, " ".join(f.message.split())) for record, f in failed]
     if failed and settings.on_error == "block":
         shown = "; ".join(f.message for _, f in failed[:5])
         more = f" (and {len(failed) - 5} more)" if len(failed) > 5 else ""
-        return InjectResult(FAILURE, f"Nut insert: {shown}{more}", text, out)
+        return InjectResult(FAILURE, f"Nut insert: {shown}{more}", text, out, left_out=left_out)
     if not planned and not failed:
         return InjectResult(SUCCESS, "No nuts to insert in this file.", text, out)
 
@@ -154,4 +158,5 @@ def inject(text: str, report: Report, lib: Library, flavor: str | None = None,
     message = f"{len(planned)} nut insert block(s) written"
     if failed or passed:
         message += f", {len(failed) + len(passed)} nut(s) skipped"
-    return InjectResult(SUCCESS, message + ".", "".join(result), out, changed=True)
+    return InjectResult(SUCCESS, message + ".", "".join(result), out, changed=True,
+                        left_out=left_out)

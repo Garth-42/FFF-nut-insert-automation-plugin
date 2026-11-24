@@ -196,6 +196,48 @@ def test_export_fails_when_the_nut_body_still_prints(plugin, tmp_path):
     assert path.read_text() == original
 
 
+def _export_with_plastic_in_the_pocket(plugin, tmp_path, on_error):
+    config = library.default_config()
+    config["settings"]["on_error"] = on_error
+    plugin.panel.on_message({"type": "save_config", "config": config})
+    orca._fake.set_model(model())
+    plugin.check.execute()
+    path = tmp_path / "plate_1.gcode"
+    path.write_text(gcode_ring(fill_inside=True))
+    ctx = orca._fake.Ctx(orca.slicing.Step.psGCodePostProcess, gcode_path=str(path),
+                         config={"gcode_flavor": "klipper"})
+    orca._fake.in_slicing_step = True                  # a notification here would deadlock
+    result = plugin.insert.execute(ctx)
+    orca._fake.in_slicing_step = False
+    return result, path.read_text()
+
+
+def test_an_export_that_leaves_a_nut_out_warns_once_it_has_finished(plugin, tmp_path):
+    result, text = _export_with_plastic_in_the_pocket(plugin, tmp_path, "skip")
+    assert result.status == OK and "skipped: E_POCKET_NOT_EMPTY" in text
+    before = len(orca._fake.notifications)
+    plugin.check.on_lifecycle_event(EV.GCodeExportFinished, None)
+    assert len(orca._fake.notifications) == before + 1
+    level, message = orca._fake.notifications[-1]
+    assert level == orca.host.ui.NotificationLevel.WarningNotificationLevel
+    assert "1 item(s) left out" in message and "NUT_M3SQ #1 (E_POCKET_NOT_EMPTY)" in message
+    plugin.check.on_lifecycle_event(EV.GCodeExportFinished, None)
+    assert len(orca._fake.notifications) == before + 1          # shown once
+
+
+def test_a_refused_export_warns_at_the_next_page_message(plugin, tmp_path):
+    """Without the GCodeExportFinished event, the warning shows at the next UI-thread call."""
+    result, _ = _export_with_plastic_in_the_pocket(plugin, tmp_path, "block")
+    assert result.status == FAIL
+    before = len(orca._fake.notifications)
+    plugin.panel.on_message({"type": "get_log"})
+    level, message = orca._fake.notifications[-1]
+    assert len(orca._fake.notifications) == before + 1
+    assert level == orca.host.ui.NotificationLevel.ErrorNotificationLevel
+    assert "refused" in message and "NUT_M3SQ #1" in message and "Modifier" in message
+    assert {"type": "error", "message": message} in plugin.panel.posted
+
+
 def test_exceptions_in_entry_points_do_not_propagate(plugin, monkeypatch, capsys):
     def boom():
         raise RuntimeError("model went away")

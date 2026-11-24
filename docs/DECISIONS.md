@@ -158,3 +158,12 @@ Each entry says what differs from the spec and why. Newest last.
     adds itself. Agreed with Garth on 24 Nov 2026. The rules are tested on the real Klipper
     export and on variants with comment labels only and with M486 labels; a real
     RepRapFirmware export should confirm them.
+40. **An export with errors raises a notification once it has finished.** With `on_error`
+    set to `skip`, a nut left out at export was named only in a G-code comment; with
+    `block`, only Orca's failure dialog said so. Garth asked for a pop-up warning in both
+    cases (24 Nov 2026). The export step runs on the slicing thread, where a notification
+    could deadlock, so it only keeps the text. The plugin raises it on Orca's
+    `GCodeExportFinished` event, which the spec does not list but the probe found in
+    `orca.LifecycleEvent`, and only on the main thread. When that event does not come, the
+    next check or panel message raises it. Items left out raise a warning; a refused
+    export raises an error.

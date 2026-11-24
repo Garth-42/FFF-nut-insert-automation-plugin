@@ -80,6 +80,12 @@ included, so expect to add it again after installing a newer wheel.
   because two versions were installed. Still to do: the first half, a slice with the nut
   body still a normal part.
 
+  Wheel 0.2.5 and later: set "When a nut has an error" to "Skip the nut and continue",
+  leave the nut body a normal part, and export. Expect the file to name the nut in a
+  "skipped" comment, and a warning notification after the export saying one item was left
+  out. Note whether it appears as soon as the export finishes (the `GCodeExportFinished`
+  event) or only at the next check or panel action (the fallback).
+
 - [ ] **Corner.** Repeat A and D with a part whose nut stands on a corner in a V slot.
 
   Result:

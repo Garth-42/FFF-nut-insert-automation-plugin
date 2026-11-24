@@ -72,6 +72,7 @@ the difference here and change only the `nut_inserter` package.
 | Logs: `print()` goes to `log/python_*.log` | `print()` raises no prompt, but no such file was found, so where the text goes is unknown | Errors are also shown in the panel and tab |
 | At post-process `ctx.print` is `None`; the model must not be read from a slicing step | `ctx.print.model()` is meant for exactly that | Not used yet |
 | Plate information is not available | `current_plate_index()` exists; per-object plate does not | Not used yet |
+| Eight lifecycle events | `orca.LifecycleEvent` also has `GCodeExportStarted`, `GCodeExportFinished`, `SliceStarted`, `SlicingJobComplete`, `PresetSelected`, `PlateSelected` and more (probe run 1, `dir`) | Wheel 0.2.5 uses `GCodeExportFinished` to show an export's warning. When it fires and on which thread is not seen yet, so the warning also shows at the next check or panel message (DECISIONS.md #40) |
 
 ## The first export (10 Nov 2026, wheel 0.2.0)
 

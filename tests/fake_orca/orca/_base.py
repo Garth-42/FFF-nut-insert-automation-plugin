@@ -40,6 +40,7 @@ class LifecycleEvent(enum.Enum):
     ProjectOpened = 6
     NewProject = 7
     ProjectClosed = 8
+    GCodeExportFinished = 9
     SliceCompleted = 99   # an event the plugin does not use
 
 

@@ -6,6 +6,7 @@ only read what the UI thread cached here. They never touch the model or the UI.
 """
 
 import json
+import threading
 import time
 import traceback
 
@@ -27,6 +28,9 @@ _notified: frozenset = frozenset()
 activity: list = []            # recent events as text, shown in the panel for troubleshooting
 _steps_seen: set = set()
 _edges: tuple = ("", [])       # (snapshot fingerprint, segments)
+# (is_error, text) from the last export, for the UI thread to show once. The export runs on
+# the slicing thread, where a notification could deadlock.
+pending_export_warning: tuple | None = None
 
 STALE_MESSAGE = ("E_STALE: the nut report is out of date. Run Check nuts (Plugins window or "
                  "the Nut panel), then slice again.")
@@ -35,8 +39,10 @@ STALE_MESSAGE = ("E_STALE: the nut report is out of date. Run Check nuts (Plugin
 def reset() -> None:
     """Forget everything. Used by tests."""
     global report, stale, config_owner, panel, last_check_seconds, _notified, _edges
+    global pending_export_warning
     report, stale, config_owner, panel = None, False, None, None
     last_check_seconds, _notified, _edges = 0.0, frozenset(), ("", [])
+    pending_export_warning = None
     tabs.clear()
     activity.clear()
     _steps_seen.clear()
@@ -105,6 +111,7 @@ def read_config() -> tuple[dict, str | None]:
 def run_check():
     """Snapshot the model, detect, cache the report and tell the pages."""
     global report, stale, last_check_seconds
+    show_export_warning()
     start = time.perf_counter()
     stale = True                       # stays set if anything below fails
     try:
@@ -208,6 +215,7 @@ def export(ctx):
     current = report
     if current is None or stale or current.stale:
         note("export: failed, the report is missing or out of date")
+        _warn_after_export(True, "refused. " + STALE_MESSAGE)
         return adapter.failure(STALE_MESSAGE)
     if not current.nuts:
         note("export: no nuts in the report, file left alone")
@@ -230,10 +238,48 @@ def export(ctx):
     print(f"Nut insert: {result.status}: {result.message}")
     note(f"export: {result.status}: {result.message}")
     if result.status == gcode_inject.FAILURE:
+        _warn_after_export(True, "refused. " + result.message)
         return adapter.failure(result.message)
+    if result.left_out:
+        _warn_after_export(False, _left_out_text(result.left_out))
     if result.status == gcode_inject.SKIPPED:
         return adapter.skipped(result.message)
     return adapter.success(result.message)
+
+
+def _warn_after_export(is_error: bool, text: str) -> None:
+    """Keep a warning for the UI thread to show once the export has finished."""
+    global pending_export_warning
+    pending_export_warning = (is_error, f"Nut insert export {time.strftime('%H:%M:%S')}: {text}")
+    note(f"export: a warning waits for the export to finish: {text}")
+
+
+def _left_out_text(left_out) -> str:
+    names = "; ".join(f"{label} ({code})" for label, code, _ in left_out[:5])
+    more = f" and {len(left_out) - 5} more" if len(left_out) > 5 else ""
+    return (f"{len(left_out)} item(s) left out because of errors: {names}{more}. Each is named "
+            "in a comment at the top of the G-code, and the Nuts tab shows the fix.")
+
+
+def show_export_warning() -> None:
+    """Show the last export's warning as a notification, once.
+
+    Only on Orca's main thread: the export itself runs on the slicing thread, where a
+    notification could deadlock, and a script's execute runs on a background thread.
+    """
+    global pending_export_warning
+    if pending_export_warning is None:
+        return
+    if threading.current_thread() is not threading.main_thread():
+        return
+    (is_error, text), pending_export_warning = pending_export_warning, None
+    adapter.notify(is_error, text)
+    broadcast({"type": "error", "message": text})
+
+
+def export_finished():
+    """Orca's GCodeExportFinished event: the export is over, so show what it left out."""
+    show_export_warning()
 
 
 # --- Pages ----------------------------------------------------------------------------------
@@ -291,6 +337,7 @@ def on_tab_message(tab, data):
 
 
 def _handle(message: dict, reply) -> None:
+    show_export_warning()          # an export may have finished since the last message
     kind = message.get("type")
     try:
         if kind == "ready":

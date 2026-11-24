@@ -28,6 +28,8 @@ EV = orca.LifecycleEvent
 MODEL_EVENTS = (EV.ObjectAdded, EV.ObjectDeleted, EV.ObjectTransformed,
                 EV.ObjectChanged, EV.ObjectRenamed, EV.ProjectOpened,
                 EV.NewProject, EV.ProjectClosed)
+# Not in the spec's event list; the probe found it in orca.LifecycleEvent (docs/api-facts.md).
+EXPORT_FINISHED = getattr(EV, "GCodeExportFinished", None)
 
 
 # True for the rest of the session in which the plugin was installed. The granted
@@ -80,6 +82,8 @@ class CheckNuts(orca.script.ScriptPluginCapabilityBase):
     def on_lifecycle_event(self, event, ctx):
         if event in MODEL_EVENTS:
             _call("model_changed")
+        elif EXPORT_FINISHED is not None and event == EXPORT_FINISHED:
+            _call("export_finished")        # show what the export left out
 
 
 class NutsTab(orca.pages.PagesPluginCapabilityBase):

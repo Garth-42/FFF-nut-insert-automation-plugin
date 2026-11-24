@@ -41,7 +41,7 @@ uv run ruff check
 uv build
 ```
 
-`uv build` writes `dist/nut_inserter-0.2.4-py3-none-any.whl`.
+`uv build` writes `dist/nut_inserter-0.2.5-py3-none-any.whl`.
 
 ## Try it without Orca
 
@@ -91,7 +91,8 @@ export result and any error.
    the allowed range and the change to make in CAD.
 5. Slice and export. An error blocks the slice (or skips the nut, your choice). At
    export the plugin proves from the toolpath that each pocket is empty, then writes
-   the insert blocks.
+   the insert blocks. A nut skipped because of an error is named in a comment at the top
+   of the G-code, and a warning pops up once the export has finished.
 
 ## What your printer macro must do
 
