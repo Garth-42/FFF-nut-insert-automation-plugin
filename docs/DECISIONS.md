@@ -449,3 +449,22 @@ Each entry says what differs from the spec and why. Newest last.
       which CI scales by 3 through `TIME_BUDGET_SCALE`: a shared runner is slower and busier
       than a desk, where the limits stay as written. The 3MF models are compared by their
       contents, not their zip bytes, since zlib builds compress the same data differently.
+
+## Plan review: three gaps closed (25 Nov 2026)
+
+52. **The plan caught up with what was built, and the real RRF export has a test waiting.**
+    - The plan's status paragraph and milestone 7 row now name the RRF stand-in, the
+      bring-up kit and the test models (#51); the plan is revision 6.
+    - `tests/test_heatset_rrf_export.py` checks the placement rules on
+      `tests/data/sample_rrf.gcode`, the file manual check G saves: the header before the
+      first object label, no object current and the print tool retracted at every block,
+      the preheat before the first block, the insert temperature recorded, and a second
+      run leaving the file byte-identical. The file is the plugin's own output, so the tests
+      check the rules on what was written rather than re-placing a stripped copy. They skip
+      until the file exists. Checked by hand on an RRF variant of `sample.gcode`: all pass,
+      and a block moved inside an object label fails.
+    - The plan now says Klipper bring-up has no bounded probe check, and that the routine's
+      `HEATSET_PROBE` on Klipper is not bounded either: it refuses a float already tripped
+      and a surface off by more than `surface_tol`, but the move runs until the float trips
+      or Z reaches `position_min`. That is the spec's phase 1; the Python extra stays under
+      Later.
