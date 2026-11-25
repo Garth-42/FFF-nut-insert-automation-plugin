@@ -72,7 +72,7 @@ the difference here and change only the `nut_inserter` package.
 | Logs: `print()` goes to `log/python_*.log` | `print()` raises no prompt, but no such file was found, so where the text goes is unknown | Errors are also shown in the panel and tab |
 | At post-process `ctx.print` is `None`; the model must not be read from a slicing step | `ctx.print.model()` is meant for exactly that | Not used yet |
 | Plate information is not available | `current_plate_index()` exists; per-object plate does not | Not used yet |
-| Eight lifecycle events | `orca.LifecycleEvent` also has `GCodeExportStarted`, `GCodeExportFinished`, `SliceStarted`, `SlicingJobComplete`, `PresetSelected`, `PlateSelected` and more (probe run 1, `dir`) | Wheel 0.2.5 uses `GCodeExportFinished` to show an export's warning. When it fires and on which thread is not seen yet, so the warning also shows at the next check or panel message (DECISIONS.md #40) |
+| Eight lifecycle events | `orca.LifecycleEvent` also has `GCodeExportStarted`, `GCodeExportFinished`, `SliceStarted`, `SlicingJobComplete`, `PresetSelected`, `PlateSelected` and more (probe run 1, `dir`) | Wheel 0.2.5 uses `GCodeExportFinished` to show an export's warning. When it fires and on which thread is not seen yet, so the warning also shows at the next check or panel message (DECISIONS.md #41) |
 
 ## The first export (10 Nov 2026, wheel 0.2.0)
 
@@ -131,7 +131,7 @@ INSERT_NUT KEY=M3SQ CLASS=FLAT X=164.706 Y=158.320 Z=1.900 Z_LOW=1.000 YAW=0.00 
 ```
 
 Since wheel 0.2.4 the block goes further down, after the layer's retract, wipe and
-`EXCLUDE_OBJECT_END`, so that it is outside the object's label (DECISIONS.md #39).
+`EXCLUDE_OBJECT_END`, so that it is outside the object's label (DECISIONS.md #40).
 
 - This is line for line what the export logic produced offline on the first file. Apart
   from these lines the two exports differ only in the settings named below.

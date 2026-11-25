@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .frame import CORNER, EDGE, FLAT, NutFrame, Z
-from .rays import GAP_BIN, GAP_EPS, RAY_GRID, RAY_INSET, cast, face_grid, robust_nearest
+from .rays import GAP_BIN, GAP_EPS, RAY_AGREE, RAY_GRID, RAY_INSET, cast, face_grid, robust_nearest
 
 RAY_REACH_FACTOR = 3.0   # a wall may be this many widths across flats away
 ROOF_AGREE = 0.5         # share of drop rays that must agree on the roof (see DECISIONS.md)
@@ -162,7 +162,8 @@ def measure(frame: NutFrame, cls: str, host: np.ndarray, across_flats: float) ->
     hits = placement[2] + t[t <= r + reach]
     top = None
     if len(hits) == 0:
-        m.rim_z = _rim(tris, placement, [(plane[0], plane[1]), (plane[2], plane[3])], reach)
+        m.rim_z = _rim(tris, placement, [(plane[0], plane[1], plane[2], plane[3]),
+                                         (plane[2], plane[3], plane[0], plane[1])], reach)
         top = m.rim_z
     else:
         roof = robust_nearest(hits, len(origins), agree=ROOF_AGREE)
@@ -209,16 +210,25 @@ def _pair_ok(m: Measurement, n, g_plus, g_minus, reach) -> bool:
 def _rim(tris, placement, pairs, reach) -> float:
     """Height of the rim of an open-top pocket.
 
-    Walk upward from the nut's centre, one horizontal ray per side. The rim is
-    the last height at which every side still sees its wall.
+    Walk upward from the nut's centre. Each side casts a row of horizontal rays
+    spread across the nut, and sees its wall when a quarter of them hit it, the
+    same rule as for the walls. A single ray from the centre line would look
+    straight down the bolt hole of a nut on edge. The rim is the last height at
+    which every side still sees its wall.
+
+    pairs: (direction, half extent along it, sideways axis, half extent along that).
     """
+    spread = np.linspace(-RAY_INSET, RAY_INSET, RAY_GRID)
+
     def seen(heights: np.ndarray) -> np.ndarray:
-        origins = np.column_stack([np.full(len(heights), placement[0]),
+        centres = np.column_stack([np.full(len(heights), placement[0]),
                                    np.full(len(heights), placement[1]), heights])
         ok = np.ones(len(heights), dtype=bool)
-        for n, h in pairs:
+        for n, h, q, hq in pairs:
+            origins = (centres[:, None, :] + spread[None, :, None] * hq * q).reshape(-1, 3)
             for sign in (1.0, -1.0):
-                ok &= cast(origins, sign * n, tris) <= h + reach
+                hit = (cast(origins, sign * n, tris) <= h + reach).reshape(-1, RAY_GRID)
+                ok &= hit.sum(axis=1) >= RAY_AGREE * RAY_GRID
         return ok
 
     chunk = 100

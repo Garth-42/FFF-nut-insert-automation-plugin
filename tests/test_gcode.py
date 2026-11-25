@@ -242,7 +242,7 @@ def test_real_sample_from_orca():
                              "Z_LOW=1.000 YAW=0.00 FEEDER=1 TOOL=-1")
     assert lines[at + 2] == END
     # The block closes the layer at Z 3.0: after its retract, its wipe and the label that
-    # ends the object, and before the next layer's label and moves (DECISIONS.md #39).
+    # ends the object, and before the next layer's label and moves (DECISIONS.md #40).
     assert lines[at - 1] == "EXCLUDE_OBJECT_END NAME=Configuration_1.step_id_0_copy_0"
     assert ";Z:3.2" in lines[at - 16:at] and lines[at + 3] == ";AFTER_LAYER_CHANGE"
     assert lines[8].startswith("; NUT_INSERT_SUMMARY")  # right after ; HEADER_BLOCK_END

@@ -4,12 +4,12 @@ Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
 `docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
 (0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), milestones 2
 to 5: the routine math, the RRF emitter with its golden file, placement in a real export,
-detection and checks (DECISIONS.md #46), and milestone 6 (wheel 0.3.0): the plugin finds
+detection and checks (DECISIONS.md #47), and milestone 6 (wheel 0.3.0): the plugin finds
 inserts, gates the slice and writes the heat-set G-code at export, with the Heat-set and
-Machine settings tabs (DECISIONS.md #47). Milestone 7, the RepRapFirmware macros the
-G-code calls (`macros/heatset/`, DECISIONS.md #48), is written and checked statically, and
+Machine settings tabs (DECISIONS.md #48). Milestone 7, the RepRapFirmware macros the
+G-code calls (`macros/heatset/`, DECISIONS.md #49), is written and checked statically, and
 milestone 9 (wheel 0.4.0) adds Klipper: the spec's templates and golden file, and the
-commands in `firmware/klipper/`, run in a stand-in for Klipper (DECISIONS.md #49). Neither
+commands in `firmware/klipper/`, run in a stand-in for Klipper (DECISIONS.md #50). Neither
 firmware's macros have run on a printer: bring them up in rehearse mode first (milestone 8).
 
 ## Summary
@@ -38,7 +38,7 @@ What changed since revision 1:
 | Firmware | RepRapFirmware first. Klipper follows the same routine later | Your answer, 24 Nov. The spec said Klipper first |
 | Printer | RepRapFirmware 3.6, standalone: meets the 3.6.0 the design needs | Your answer, 24 Nov |
 | RRF calls | The letters and file names in the table under "Emitted lines" | Approved 24 Nov |
-| Block placement | After the layer's retract, wipe and object-end label, for heat-set and nut blocks. Nut blocks moved in wheel 0.2.4 | Approved 24 Nov; DECISIONS.md #39 |
+| Block placement | After the layer's retract, wipe and object-end label, for heat-set and nut blocks. Nut blocks moved in wheel 0.2.4 | Approved 24 Nov; DECISIONS.md #40 |
 | Body name | `HEATSET_<key>`, where key is the profile's `insert_key`, for example `HEATSET_M3x5.7` | Your answer, 24 Nov. The spec said `HSI_<key>` |
 | Insert height | `z_top` is the top of the modelled body, snapped to the top of the layer that prints it. To be checked later against the hole's rim | Your answer, 24 Nov |
 | When | `after_layer` by default: right after the layer that prints `z_top`. `end_of_print` stays available | Your answer, 24 Nov. The spec's default was `end_of_print` |
@@ -46,7 +46,7 @@ What changed since revision 1:
 | Tilted or inverted insert | A warning and no insert command (`W_TILTED`, `W_INVERTED`). A vertical hole in a surface that is not flat is still refused (`E_SURFACE`) | Your answer, 24 Nov |
 | Magazine capacity | A profile variable, `magazine_capacity`, TBD until measured. Rule 9 refuses a print with more inserts | Your answer, 24 Nov |
 | Hold-down warning | Two TBD profile variables: `min_contact_area` (mm²) and `max_height_ratio` (height ÷ √area). Warn when a part fails either | Your answer, 24 Nov |
-| Insert errors | With `on_error: skip` a failing insert is left out and named in a comment, as nuts are. An export with any errors raises a pop-up warning once it finishes, built for nuts in wheel 0.2.5 | Your answer, 24 Nov; DECISIONS.md #40 |
+| Insert errors | With `on_error: skip` a failing insert is left out and named in a comment, as nuts are. An export with any errors raises a pop-up warning once it finishes, built for nuts in wheel 0.2.5 | Your answer, 24 Nov; DECISIONS.md #41 |
 | Panel layout | A Machine settings tab for the heat-set tool's hardware values, apart from the process settings | Your suggestion, 24 Nov |
 | Insert size | One per tool, in the tool profile | Spec |
 | Routine | The spec's eleven steps, header, preheat, blocks, rehearse mode | Spec |
@@ -81,7 +81,7 @@ reference, read on 24 Nov.
 - **Abort becomes a question.** RRF's `abort` ends the whole print, and after a pause and resume
   the print's own moves would run on with the tool where it stopped. So `fail.g` stays in place
   with the throat at standby (`M568 P<tool> A1`) and asks with a blocking `M291`: go on without
-  the insert, lifting clear, or stop the print (DECISIONS.md #48).
+  the insert, lifting clear, or stop the print (DECISIONS.md #49).
 - **Preheat without selecting the tool:** `M568 P<tool> S<temp> A2` heats the heat-set tool to its
   active temperature while the print tool keeps printing.
 - **Tool save and restore:** `begin.g` stores `state.currentTool` in a global, and `end.g` selects it
@@ -171,7 +171,7 @@ labels. A real RRF export should confirm them when you can make one.
    and after any label that ends an object (`; stop printing object`, `M486 S-1`,
    `EXCLUDE_OBJECT_END`), before anything that starts the next layer or the end G-code. The print
    tool has then retracted and wiped, and no object is current. `nutcore/gcode/place.py` does
-   this for nut blocks since wheel 0.2.4 (DECISIONS.md #39), and heat-set blocks will use it too.
+   this for nut blocks since wheel 0.2.4 (DECISIONS.md #40), and heat-set blocks will use it too.
 2. **Preheat can use the slicer's time estimate.** The sample has 134 lines of
    `M73 P<percent> R<minutes left>`, and RRF supports `M73 R`. `preheat.g` goes at the last `M73`
    line whose R exceeds the R at the block by at least `preheat_lead`, rounded up to whole minutes.
@@ -407,12 +407,12 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 1. Profile (done, 0.2.6) | `profile.py`, settings schema 2 and migration, the `HEATSET_` marker | Each rule broken in turn refuses; migration keeps the nut library (`tests/test_heatset_profile.py`) |
 | 2. Routine math (done) | `routine.py` | Derived values, push + L = Li + e, the heights table (`tests/test_heatset_routine.py`) |
 | 3. RRF emitter (done) | `emit.py`, RRF template set | The RRF golden file byte for byte (`tests/data/heatset_golden_rrf.gcode`); rehearse differs only in the mode value |
-| 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #45) |
-| 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #46) |
-| 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #47) |
-| 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #48). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
-| 8. Bring-up | Manual, as the spec, on the RRF printer, with the kit: check macros, the air test (`heatsetcore.bringup`) and `models/heatset_bringup_coupon.3mf` (DECISIONS.md #50) | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
-| 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` and `heatset_limits.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #49) |
+| 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #46) |
+| 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #47) |
+| 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #48) |
+| 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #49). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
+| 8. Bring-up | Manual, as the spec, on the RRF printer, with the kit: check macros, the air test (`heatsetcore.bringup`) and `models/heatset_bringup_coupon.3mf` (DECISIONS.md #51) | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
+| 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` and `heatset_limits.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #50) |
 
 ## Later
 

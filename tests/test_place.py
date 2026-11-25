@@ -1,4 +1,4 @@
-"""Where insert blocks go (nutcore/gcode/place.py, DECISIONS.md #39).
+"""Where insert blocks go (nutcore/gcode/place.py, DECISIONS.md #40).
 
 A block goes after the layer's retract, wipe and object label, outside every label a
 firmware uses to cancel an object, and never inside the end G-code.

@@ -138,10 +138,18 @@ Each entry says what differs from the spec and why. Newest last.
     one `state` module, and with it the cached report, is shared by every load.
 38. **`on_unload` closes the panel and forgets the tab, and `broadcast` skips pages that
     no longer answer.** A second load would otherwise leave two panels and stale tabs.
+39. **The rim walk casts five rays per side, not one.** The spec's single ray from the
+    nut's centre line looks straight down the bolt hole of a nut on edge, so an open-top
+    slot with a bolt hole was measured as having no walls (rim at the nut's centre, false
+    `E_DEPTH`). Each side now casts a row of rays spread across the nut and sees its wall
+    when a quarter of them hit, the same rule as for the walls. Bolt holes are otherwise
+    handled by the existing agreement rules: walls and the seat need 25 % of a face's
+    rays, the roof 50 %. On the 5 x 5 grid that holds for a round hole up to 0.8 of the
+    width across flats; a wider hole through the roof reports `E_DROP_PATH`.
 
 ## RepRapFirmware first (24 Nov 2026)
 
-39. **Insert blocks go after the layer's retract, wipe and object label.** The spec puts a
+40. **Insert blocks go after the layer's retract, wipe and object label.** The spec puts a
     block on the line after the layer's last extruding move. OrcaSlicer writes the layer's
     object label comment, `;LAYER_CHANGE`, the retract, the wipe and, for Klipper,
     `EXCLUDE_OBJECT_END` after that line, so the block ran inside the object's label with
@@ -158,7 +166,7 @@ Each entry says what differs from the spec and why. Newest last.
     adds itself. Agreed with Garth on 24 Nov 2026. The rules are tested on the real Klipper
     export and on variants with comment labels only and with M486 labels; a real
     RepRapFirmware export should confirm them.
-40. **An export with errors raises a notification once it has finished.** With `on_error`
+41. **An export with errors raises a notification once it has finished.** With `on_error`
     set to `skip`, a nut left out at export was named only in a G-code comment; with
     `block`, only Orca's failure dialog said so. Garth asked for a pop-up warning in both
     cases (24 Nov 2026). The export step runs on the slicing thread, where a notification
@@ -170,14 +178,14 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestone 1 (24 Nov 2026)
 
-41. **Settings schema 2.** The settings document gains a `heatset` section, one profile per
+42. **Settings schema 2.** The settings document gains a `heatset` section, one profile per
     heat-set tool (`heatsetcore.profile`). `library.migrate()` turns a schema-1 document
     into schema 2 by adding the default section and changing nothing else.
     `state.read_config`, the panel's save and the command line run it before validating.
     Without it, `read_config` would treat a schema-1 library as unusable and show the
     defaults, and the next save would overwrite the tuned nut ranges. Bodies named
     `HEATSET_<key>` are neither walls nor nut records in the nut detection.
-42. **The heat-set profile differs from docs/HEATSET_GCODE_SPEC.md** as Garth decided on
+43. **The heat-set profile differs from docs/HEATSET_GCODE_SPEC.md** as Garth decided on
     24 Nov 2026:
     - Bodies are named `HEATSET_<key>`, not `HSI_<key>`. The key is the profile's
       `insert_key`, which may contain dots (`M3x5.7`), unlike a nut key.
@@ -195,7 +203,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestones 2 and 3 (24 Nov 2026)
 
-43. **The RepRapFirmware template set.** The spec gives exact templates for Klipper only and
+44. **The RepRapFirmware template set.** The spec gives exact templates for Klipper only and
     says RRF follows "as macro files with the same command names". `heatsetcore/emit.py`
     writes each command as `M98 P"heatset/<name>.g"` with single-letter parameters, as
     approved by Garth on 24 Nov 2026 (docs/heatset-plan.md, "Emitted lines"). The hot push
@@ -204,17 +212,17 @@ Each entry says what differs from the spec and why. Newest last.
     profile and the header for Klipper. Speeds are mm/s with one decimal under `V`;
     temperatures are whole degrees, with one decimal only when there is a fraction. The
     golden file is `tests/data/heatset_golden_rrf.gcode`.
-44. **`profile.derived` moved to `routine.derived`.** The profile module holds data and
+45. **`profile.derived` moved to `routine.derived`.** The profile module holds data and
     validation; the routine math is in `routine.py`, with the heights table and each insert's
     positions, so the emitter writes no number of its own.
 
 ## Heat-set inserts, milestone 4 (24 Nov 2026)
 
-45. **How `heatsetcore/place.py` reads the spec's placement rules.**
+46. **How `heatsetcore/place.py` reads the spec's placement rules.**
     - The header goes before the first object label, which comes after the start G-code,
       or before the first Z move when the file has no labels. The spec says "right after
       the slicer's start G-code", which a file does not mark without comments.
-    - Blocks use `nutcore.gcode.place.block_after` (#39), which now also steps past a nut
+    - Blocks use `nutcore.gcode.place.block_after` (#40), which now also steps past a nut
       block written at the same point, so the nut block comes first, as agreed.
     - `z_top` snaps to the top of the first layer printed around the hole at or above the
       modelled top. The empty-hole proof checks the layers between the hole's bottom and
@@ -237,7 +245,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestone 5 (24 Nov 2026)
 
-46. **How `heatsetcore` finds and checks an insert** (`insert.py`, `hole.py`, `checks.py`,
+47. **How `heatsetcore` finds and checks an insert** (`insert.py`, `hole.py`, `checks.py`,
     `detect.py`; cases H1–H20 in `tests/test_heatset_detect.py`).
     - **Frame.** Normals binned by direction, as the plan says. The first of the eight
       largest bins along which the body measures the profile's length and diameter, each
@@ -284,7 +292,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestone 6 (24 Nov 2026, wheel 0.3.0)
 
-47. **How the plugin runs heat-set inserts.**
+48. **How the plugin runs heat-set inserts.**
     - **One check, one report.** `state.run_check` runs the nut detection, then
       `heatsetcore.detect.detect_inserts` on the same snapshot; inserts are numbered after
       the nuts. The panel, the Nuts tab, the gate and the notifications read both kinds.
@@ -329,7 +337,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestone 7 (24 Nov 2026)
 
-48. **The RepRapFirmware macros, `macros/heatset/*.g`.** One file per call the emitter
+49. **The RepRapFirmware macros, `macros/heatset/*.g`.** One file per call the emitter
     writes, plus `init.g` (globals, limits, axis A, the saved magazine), `limits.g`,
     `heat.g`, `stock.g`, `fail.g`, `stop.g`, `save.g` and `refill.g`. Install guide and
     bring-up steps: `macros/heatset/README.md`. Not yet run on a printer; the static
@@ -367,7 +375,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Heat-set inserts, milestone 9: Klipper (24 Nov 2026, wheel 0.4.0)
 
-49. **How the Klipper side is built.**
+50. **How the Klipper side is built.**
     - **Emitter.** The spec's Klipper templates, word for word; the worked example is
       `tests/data/heatset_golden_klipper.gcode`, taken from the spec with its 26
       `_HS_PUSH_TICK` lines, and matched byte for byte. P14 runs P1–P5 on the Klipper export
@@ -384,7 +392,7 @@ Each entry says what differs from the spec and why. Newest last.
       cannot ask mid-print, and `RESUME` moves back to where the pause happened before the
       print's own `G0` lines run, so `_HS_ABORT` sets the throat to standby, skips the rest
       of the insert, lifts straight up to the block's safe height, and then pauses with the
-      configured pause that does not park. The RRF side asks first (#48).
+      configured pause that does not park. The RRF side asks first (#49).
     - **Short magazine and cold throat pause without skipping**, as the spec says; the probe
       checks both again before it moves, so resuming before fixing them stops that insert
       instead of pushing cold or empty. Each insert sets the throat back to the insert
@@ -410,7 +418,7 @@ Each entry says what differs from the spec and why. Newest last.
 
 ## Before printer testing: stand-ins, bring-up kit, test models (25 Nov 2026)
 
-50. **What was added to test with, and its limits.**
+51. **What was added to test with, and its limits.**
     - **A stand-in for RepRapFirmware** (`tests/rrf_sim.py`) runs `macros/heatset/*.g` on
       the plugin's G-code, as `tests/klipper_sim.py` does for Klipper
       (`tests/test_rrf_macros.py`: a normal print, rehearse mode, every failure path and the
