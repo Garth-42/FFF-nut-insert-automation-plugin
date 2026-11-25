@@ -119,7 +119,9 @@ included, so expect to add it again after installing a newer wheel.
   in Rehearse mode slice and export. Expect the header (`; HEATSET profile "Concept D"`)
   before the first object label, `M98 P"heatset/..."` lines after the layer that prints the
   hole's rim, and `insert_temp_used` giving the print temperature plus 15 °C. Save the file
-  as `tests/data/sample_rrf.gcode`. Run it on the printer only as check H says.
+  as `tests/data/sample_rrf.gcode`, commit it, and run `uv run pytest -q
+  tests/test_heatset_rrf_export.py`: its seven tests skip until the file exists and then check
+  the placement rules on it. Run it on the printer only as check H says.
 
   Result:
 

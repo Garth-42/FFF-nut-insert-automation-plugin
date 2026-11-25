@@ -1,6 +1,6 @@
 # Heat-set inserts: plan
 
-Nov 24, 2026 · revision 5: RepRapFirmware first, after your answers and
+Nov 25, 2026 · revision 6: RepRapFirmware first, after your answers and
 `docs/HEATSET_GCODE_SPEC.md`. Built so far: milestone 0 (wheel 0.2.4), the export pop-up
 (0.2.5), milestone 1, the heat-set profile and settings schema 2 (0.2.6), milestones 2
 to 5: the routine math, the RRF emitter with its golden file, placement in a real export,
@@ -9,8 +9,13 @@ inserts, gates the slice and writes the heat-set G-code at export, with the Heat
 Machine settings tabs (DECISIONS.md #48). Milestone 7, the RepRapFirmware macros the
 G-code calls (`macros/heatset/`, DECISIONS.md #49), is written and checked statically, and
 milestone 9 (wheel 0.4.0) adds Klipper: the spec's templates and golden file, and the
-commands in `firmware/klipper/`, run in a stand-in for Klipper (DECISIONS.md #50). Neither
-firmware's macros have run on a printer: bring them up in rehearse mode first (milestone 8).
+commands in `firmware/klipper/`, run in a stand-in for Klipper (DECISIONS.md #50). Before
+printer testing (DECISIONS.md #51): a stand-in for RepRapFirmware (`tests/rrf_sim.py`) now
+runs the RRF macros through a normal print, rehearse mode and every failure path; the
+bring-up kit (check macros for both firmwares and the air test from `heatsetcore.bringup`)
+and the test coupons in `models/` are ready. Both stand-ins are written from the firmware
+documentation, so neither firmware's macros have run on a printer: bring them up in
+rehearse mode first (milestone 8), starting with a real RRF export (manual check G).
 
 ## Summary
 
@@ -190,8 +195,14 @@ labels. A real RRF export should confirm them when you can make one.
 
 ## Still open
 
-No questions are open. For later: an Orca export of a test part with your RRF printer profile,
-saved as `tests/data/sample_rrf.gcode`, to confirm the placement rules on real RRF output.
+No questions are open. One thing waits on the printer's profile: an Orca export with your RRF
+printer profile. The placement rules above are tested only on the Klipper sample and RRF variants
+made from it. Manual check G exports the bring-up coupon with the plugin and saves the file as
+`tests/data/sample_rrf.gcode`; `tests/test_heatset_rrf_export.py` then checks findings 1, 2, 4 and
+5 and P12 on it (the header before the first label, no object current and the print tool
+retracted at every block, the preheat before the first block, the temperature recorded, and a
+second run leaving the file alone). It skips until the file is there. It is the first step of
+milestone 8.
 
 ## Architecture
 
@@ -410,9 +421,20 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 4. Placement (done) | `place.py`, export composition | P1–P13, P15 and P16 on the RRF variants of the real export, using hand-made insert records (`tests/test_heatset_place.py`; DECISIONS.md #46) |
 | 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #47) |
 | 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #48) |
-| 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #49). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
-| 8. Bring-up | Manual, as the spec, on the RRF printer, with the kit: check macros, the air test (`heatsetcore.bringup`) and `models/heatset_bringup_coupon.3mf` (DECISIONS.md #51) | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
-| 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` and `heatset_limits.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #50) |
+| 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #49); the macros run in `tests/rrf_sim.py` through a normal print, rehearse mode and every failure path (`tests/test_rrf_macros.py`; DECISIONS.md #51). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
+| 8. Bring-up | Manual, as the spec, on the RRF printer, with the kit: check macros, the air test (`heatsetcore.bringup`) and `models/heatset_bringup_coupon.3mf` (DECISIONS.md #51). First, a real RRF export saved as `tests/data/sample_rrf.gcode` (manual check G) | `tests/test_heatset_rrf_export.py` passes on that file; a rehearse run, every TBD measured, a coupon insert within `flush_tol` |
+| 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg`, `heatset_limits.cfg` and `heatset_checks.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #50) |
+
+**Klipper bring-up has no probe check.** RRF's `check_probe.g` lowers at most D mm until the float
+trips. Klipper's `PROBE` takes no travel limit, so `heatset_checks.cfg` has only
+`HEATSET_CHECK_FLOAT` and `HEATSET_CHECK_FOLLOWER` (DECISIONS.md #51). On Klipper, check the probe
+by hand, as `firmware/klipper/README.md` says: `PROBE PROBE_SPEED=1` with the pad a few millimetres
+over a flat plate, ready to stop it. The same holds in a print: `HEATSET_PROBE` refuses a float
+that reads tripped before it starts and a surface more than `surface_tol` from `z_top` after it
+stops, but the move itself runs until the float trips or Z reaches `position_min`. Bounded
+probing on Klipper needs the spec's Python extra (heatset.py), under Later; until then a broken
+float wire reads tripped (the README's wiring) and the open check catches it, but a float
+that sticks open is not caught until Z reaches `position_min`.
 
 ## Later
 
