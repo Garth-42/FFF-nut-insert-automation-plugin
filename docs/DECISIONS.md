@@ -407,3 +407,33 @@ Each entry says what differs from the spec and why. Newest last.
       plugin's G-code through them: a normal print, rehearse mode, every failure path. It
       found `G1 A{-dist}`: with Klipper's `{ }` delimiters, `{-` is whitespace control, so
       the retract rendered as `A0.3`, forwards. A test now bans `{-` and `-}`.
+
+## Before printer testing: stand-ins, bring-up kit, test models (25 Nov 2026)
+
+50. **What was added to test with, and its limits.**
+    - **A stand-in for RepRapFirmware** (`tests/rrf_sim.py`) runs `macros/heatset/*.g` on
+      the plugin's G-code, as `tests/klipper_sim.py` does for Klipper
+      (`tests/test_rrf_macros.py`: a normal print, rehearse mode, every failure path and the
+      refusals). It is written from the Duet3D documentation, not from RRF's source, so
+      where the documentation leaves behaviour open it takes the stricter side: `&&` and
+      `||` evaluate both operands, a macro's G90/G91 and feed rate carry on after it
+      returns, `if` and `!` take only booleans, and any command or function outside the
+      subset the macros use is an error. Eight hand-made faults in the macros (a wrong
+      surface formula, a missing wait count, no lift after a stop, the wrong tool restored,
+      an inverted temperature check, no cancelled-object check, a forward retract, rehearse
+      moving the follower) each make tests fail. The macros passed it unchanged.
+    - **The bring-up kit.** `heatsetcore.bringup` writes the air test: one insert's routine,
+      always in rehearse mode, its surface at least 5 mm (40 by default) over an empty bed,
+      from the profile in the panel's exported settings. RRF gets `check_float.g`,
+      `check_follower.g` and `check_probe.g`; Klipper `heatset_checks.cfg` with
+      `HEATSET_CHECK_FLOAT` and `HEATSET_CHECK_FOLLOWER`, but no probe check, since Klipper's
+      `PROBE` has no travel limit. All run in the stand-ins (`tests/test_bringup.py`).
+    - **Test models** (`models/*.3mf`, made by `tests/models3mf.py`): ten check coupons, one
+      per finding, and a bring-up coupon. The test builders' meshes are not closed, so these
+      are built anew: a block whose top face stitches the hole's ring to the rectangle's
+      outline, every edge shared by exactly two faces. Each coupon is one 3MF object whose
+      two components are the block and the insert body. Whether Orca keeps components as
+      named parts is for check F to confirm; `tests/test_models.py` reads the files back,
+      checks every mesh is closed and faces outward, and gives each coupon its finding.
+    - **No CI.** The repository has no CI workflow; all of these are ordinary pytest tests
+      and run with `uv run pytest`.

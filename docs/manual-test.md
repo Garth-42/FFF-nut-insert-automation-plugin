@@ -101,41 +101,42 @@ included, so expect to add it again after installing a newer wheel.
 
   Result:
 
-- [ ] **F, Heat-set check and tabs** (wheel 0.3.0). Add a Ø4 × 6.7 mm hole to a test part
-  and a cylinder body Ø4.6 × 5.7 mm in it, flush with the top, named `HEATSET_M3x5.7`, set
-  to Modifier. Press Check nuts. Expect the insert in the report after the nuts, with
-  `E_PROFILE` naming the values still to measure. Open the panel's Heat-set and Machine
-  settings tabs: every placeholder carries a TBD badge, the derived values show, and a
-  rule broken on purpose (pad drop 0.9) is named under the profile picker. Switch the
-  mode to Rehearse, save, and expect the insert to turn OK. In the Nuts tab, select the
-  insert and find its two footprints: solid with the mouth over the hole, dashed with the
-  pad over it.
+- [ ] **F, Heat-set check and tabs** (wheel 0.3.0 or later). Load
+  `models/heatset_check_coupons.3mf` as `models/README.md` says: ten coupons, each a block
+  and an insert body, the bodies set to Modifier. Press Check nuts. Expect each coupon's
+  finding from the table in `models/README.md`, plus `E_PROFILE` on every insert naming the
+  values still to measure. Open the panel's Heat-set and Machine settings tabs: every
+  placeholder carries a TBD badge, the derived values show, and a rule broken on purpose
+  (pad drop 0.9) is named under the profile picker. Switch the mode to Rehearse, save, and
+  expect `E_PROFILE` to go. In the Nuts tab, select coupon 1's insert and find its two
+  footprints: solid with the mouth over the hole, dashed with the pad over it. Note whether
+  Orca kept the part names and whether each coupon arrived as two parts.
 
   Result:
 
-- [ ] **G, Heat-set export** (wheel 0.3.0, RepRapFirmware printer profile). With the
-  profile still in Rehearse mode, slice and export. Expect the header
-  (`; HEATSET profile "Concept D"`) before the first object label, `M98 P"heatset/..."`
-  lines after the layer that prints the hole's rim, and `insert_temp_used` giving the
-  print temperature plus 15 °C. Save the file as `tests/data/sample_rrf.gcode`. Run it on
-  the printer only as check H says, in rehearse mode.
+- [ ] **G, Heat-set export** (wheel 0.3.0 or later, RepRapFirmware printer profile). Load
+  `models/heatset_bringup_coupon.3mf`, set its insert body to Modifier, and with the profile
+  in Rehearse mode slice and export. Expect the header (`; HEATSET profile "Concept D"`)
+  before the first object label, `M98 P"heatset/..."` lines after the layer that prints the
+  hole's rim, and `insert_temp_used` giving the print temperature plus 15 °C. Save the file
+  as `tests/data/sample_rrf.gcode`. Run it on the printer only as check H says.
 
   Result:
 
-- [ ] **H, Heat-set macros, rehearse mode** (milestone 8 starts here). Install
-  `macros/heatset/` as its README says, with the profile in Rehearse mode. Run check G's
-  file with `M37 P"<file>"` first, then print it. Expect no heat, no follower move, every
-  move rehearse_lift above the part, and `rehearsed` lines in `/sys/heatset/log.csv`. Then
-  work through the README's bring-up checks (float, `G38.3` on Z and A, the unsheath
-  speed, a cancelled object, Stop the print) and note each result here.
+- [ ] **H, Heat-set bring-up on RepRapFirmware** (milestone 8). Install `macros/heatset/`
+  and work through its README's "Bring-up, one step at a time": `check_float.g`,
+  `check_follower.g`, `check_probe.g`, the air test from `heatsetcore.bringup` (with
+  `M37` first), then check G's file in rehearse mode. Expect no heat, no follower move, the
+  pad never closer than probe_start to the coupon, and `rehearsed` lines in
+  `/sys/heatset/log.csv`. Note each step's result here, and the README's list of what only
+  the printer can show.
 
   Result:
 
-- [ ] **I, Heat-set on Klipper, rehearse mode** (wheel 0.4.0, if the tool goes on a
-  Klipper printer). Install `firmware/klipper/` as its README says, set the profile's
-  firmware to Klipper and its mode to Rehearse, export a coupon with one insert and print
-  it. Expect the same as check H, and `insert 1 rehearsed` in the console. Then work through
-  the README's bring-up checks and note each result here.
+- [ ] **I, Heat-set bring-up on Klipper** (wheel 0.4.0, if the tool goes on a Klipper
+  printer). Install `firmware/klipper/` and work through its README's "Bring-up, one step at
+  a time": `HEATSET_CHECK_FLOAT`, `HEATSET_CHECK_FOLLOWER`, `PROBE` by hand, the air test with
+  `--firmware klipper`, then the bring-up coupon in rehearse mode. Note each step's result.
 
   Result:
 

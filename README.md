@@ -9,7 +9,7 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 349 tests pass on synthetic
+All seven milestones of the build brief are implemented. 394 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
 module.
 
@@ -24,6 +24,10 @@ in Orca. The heat-set profile's firmware picks the G-code: RepRapFirmware, whose
 in [`macros/heatset/`](macros/heatset/README.md), or Klipper (wheel 0.4.0), whose commands
 are in [`firmware/klipper/`](firmware/klipper/README.md), each with its install guide.
 Neither has run on a printer: bring them up in rehearse mode first, as the guides say.
+Both run in stand-ins for their firmware in the tests (`tests/rrf_sim.py`,
+`tests/klipper_sim.py`). The bring-up kit is the air test
+(`uv run python -m heatsetcore.bringup`), check macros for each firmware, and test
+coupons in [`models/`](models/README.md).
 
 In OrcaSlicer 2.5.0 (macOS) it has run end to end on one real part: a flat M3 square nut
 in a roofed pocket, Voron 2.4 profile, Klipper. The check, the docked panel, the Nuts
@@ -150,10 +154,12 @@ src/nutcore/        detection, checker, report, G-code export. Plain Python + nu
 src/heatsetcore/    heat-set inserts: profile, detection, routine, G-code. Plain Python + numpy.
 src/nut_inserter/   the Orca plugin. adapter.py holds every orca.host call.
 probe/              single-file plugin that logs what Orca's plugin API exposes
-tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py
+tests/              builders.py (synthetic meshes and G-code), fake_orca/, test_*.py,
+                    rrf_sim.py and klipper_sim.py (firmware stand-ins), models3mf.py
 docs/               SPEC, DECISIONS (deviations), api-facts, api-gaps, manual-test
 macros/             printer-side macros: nut insert dry runs (RRF, Klipper), heat-set (RRF)
-firmware/klipper/   heat-set commands for Klipper, and their limits
+firmware/klipper/   heat-set commands for Klipper, their limits and bring-up checks
+models/             heat-set test coupons (3MF) for the checks and for bring-up
 ```
 
 The data flow:

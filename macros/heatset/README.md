@@ -60,6 +60,14 @@ Used by the others, or by you:
 | `save.g` | Writes `count.g`: inserts left, their key, the pending follower retract |
 | `refill.g` | You run it after loading the magazine |
 
+Bring-up checks, which you run from the console (below):
+
+| File | Does |
+| --- | --- |
+| `check_float.g` | Reads the float free, then watches 15 s for you to push it up. Nothing moves |
+| `check_follower.g` | Moves axis A forward D mm and back (default 1 mm), after asking |
+| `check_probe.g` | Lowers at most D mm until the float trips, reports the height, goes back up, after asking |
+
 `count.g` and `log.csv` are written on the printer. `log.csv` gets one line per insert:
 index, key, X, Y, surface minus z_top, waits, proud, and done, rehearsed or skipped.
 
@@ -81,25 +89,47 @@ An insert that stays proud by more than flush_tol warns, or with on_proud `pause
 the same question. The magazine running short asks for a refill: answer Refilled and
 type how many are loaded.
 
-## Bring-up, rehearse mode first
+## Bring-up, one step at a time
 
-In the plugin, set the heat-set profile's mode to Rehearse and export a coupon with one
-insert. In rehearse mode the throat stays off, axis A never moves, the probe is skipped
-(the surface is taken as z_top + rehearse_lift) and the count does not change, so every
-move runs rehearse_lift above the part.
+Each step comes before the plugin's G-code touches anything. Keep a hand near the
+emergency stop. Note what you see in `docs/manual-test.md`, check H.
 
-1. Run the file with `M37 P"<file>"` first (simulation): the macros run, nothing moves,
-   and any error in them shows in the console.
-2. Print it in rehearse mode and watch each step; `log.csv` should say `rehearsed`.
-3. Check on the printer, and note in `docs/manual-test.md`:
-   - the float reads triggered (`sensors.probes[<n>].value[0]` at or over the threshold)
-     when pressed and when unplugged;
-   - `G38.3 K<n> Z... F...` stops when the float trips, and `G38.3 K<n> A... F...` does the
-     same on axis A;
-   - the unsheath moves Z and A at the same speed (`F` is V × 60 × √2 for a linear A);
-   - an object cancelled in Duet Web Control skips its inserts (`insert_start.g` matches
-     the object name the G-code passes in `O`);
-   - "Stop the print" ends the print and turns the heaters named above off; whether
-     RRF also runs `cancel.g` then.
-4. Measure every TBD in the Machine settings tab, then go to normal mode with one insert
-   in a flat coupon.
+1. **Install and restart** as above. The console says `heatset: ready`.
+2. **The float.** `M98 P"heatset/check_float.g"`: it must read open, then trip when you
+   push it up within 15 seconds. Unplug the float and run it again: it must read tripped.
+3. **The follower.** Home axis A, empty the magazine, then
+   `M98 P"heatset/check_follower.g" D1 V1`: the stack side moves 1 mm toward the mouth and
+   back.
+4. **The probe.** Select the heat-set tool (`T3`), put the pad a few mm over a flat plate,
+   and run `M98 P"heatset/check_probe.g" D5 V1` a few times: the trip height should repeat
+   within a few hundredths of a millimetre.
+5. **The air test.** On your computer, with the settings JSON from the Nut panel's Export
+   button saved as `nut_settings.json`:
+
+   ```bash
+   uv run python -m heatsetcore.bringup --x 150 --y 150 --z 40 \
+       --settings nut_settings.json --out air_test.gcode
+   ```
+
+   It is one insert's routine in rehearse mode, its surface 40 mm over the bed. Upload it,
+   run `M37 P"air_test.gcode"` first (simulation: the macros run, nothing moves, errors
+   show in the console), then print it with the bed clear: the tool change and every move
+   of the routine, no heat, no follower move, `rehearsed` in `/sys/heatset/log.csv`. Pick X
+   and Y so that X - pad_dx is on the bed too.
+6. **A coupon, rehearse mode.** Slice `models/heatset_bringup_coupon.3mf` with the profile
+   in Rehearse mode (`models/README.md`) and print it: the routine runs above the coupon's
+   hole, the pad never closer than probe_start.
+7. **Measure every TBD** in the Machine settings tab, as the spec's table says, then normal
+   mode with one insert in the bring-up coupon.
+
+`tests/test_rrf_macros.py` already runs these macros on the plugin's G-code in a stand-in
+for RepRapFirmware (`tests/rrf_sim.py`): a normal print, rehearse mode and every failure
+path. What only the printer can show, so check it along the way:
+
+- `G38.3 K<n> A... F...` stops on axis A when the float trips, as it does on Z;
+- the unsheath moves Z and A at the same speed (`F` is V × 60 × √2 for a linear A);
+- an object cancelled in Duet Web Control skips its inserts (`insert_start.g` matches the
+  object name the G-code passes in `O`);
+- the dialogs show in Duet Web Control or on the PanelDue, and the print waits for them;
+- "Stop the print" ends the print and turns the heaters named above off, and whether RRF
+  also runs `cancel.g` then.

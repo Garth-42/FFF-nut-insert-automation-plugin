@@ -48,6 +48,9 @@ RepRapFirmware comes first; Klipper later.
 - `tests/builders.py` synthetic meshes and G-code. `tests/fake_orca/orca/` stand-in `orca` module.
 - `probe/nut_api_probe.py` single-file plugin a person runs in Orca to settle open API questions.
 - `macros/heatset/` the RepRapFirmware 3.6 macros the heat-set G-code calls. `tests/test_heatset_macros.py`
-  keeps them in step with `heatsetcore/emit.py`.
+  keeps them in step with `heatsetcore/emit.py`; `tests/test_rrf_macros.py` runs them in `tests/rrf_sim.py`,
+  a stand-in for RepRapFirmware.
 - `firmware/klipper/` the Klipper commands the heat-set G-code calls. `tests/test_klipper_macros.py` runs
   them in `tests/klipper_sim.py`, a stand-in for Klipper; with Klipper's `{ }` delimiters never write `{-`.
+- `models/` heat-set test coupons, made by `tests/models3mf.py` (rerun it after changing it);
+  `tests/test_models.py` checks them. `heatsetcore/bringup.py` writes the air test for bring-up.

@@ -275,7 +275,10 @@ def test_every_command_the_emitter_writes_is_a_macro_reading_its_parameters():
 def test_templates_keep_clear_of_what_klipper_cuts():
     """A ; ends a G-code line in Klipper and a # after a space ends a config value. With
     Klipper's { } delimiters, {- and -} are Jinja whitespace control: {-x} renders x."""
-    for name, text in gcode_blocks(MACROS).items():
+    blocks = {name: text for path in (LIMITS, MACROS, CFG / "heatset_checks.cfg")
+              for name, text in gcode_blocks(path).items()}
+    assert {"_HS_LIMITS", "HEATSET_CONFIG", "HEATSET_CHECK_FLOAT"} <= set(blocks)
+    for name, text in blocks.items():
         for line in text.splitlines():
             assert ";" not in line, (name, line)
             assert not re.search(r"\s#", line), (name, line)

@@ -411,7 +411,7 @@ and the plugin and pages added as 6. Each ends with its tests passing and a comm
 | 5. Checks (done) | `insert.py`, `hole.py`, `checks.py`, `detect.py` | H1–H20 and the extra checks (`tests/test_heatset_detect.py`; DECISIONS.md #46) |
 | 6. Plugin and pages (done, 0.3.0) | State, gate, export (`heatsetcore/export.py`), panel tabs, tab footprints | Plugin cases pass (`tests/test_plugin.py`, `tests/test_heatset_export.py`); wheel 0.3.0 builds (DECISIONS.md #47) |
 | 7. RRF macros (written, not yet run) | `macros/heatset/*.g` and `limits.g`; install and bring-up in `macros/heatset/README.md` | Static checks pass (`tests/test_heatset_macros.py`; DECISIONS.md #48). Still to do on the printer: every macro in rehearse mode, `M37` simulation of a whole file |
-| 8. Bring-up | Manual, as the spec, on the RRF printer | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
+| 8. Bring-up | Manual, as the spec, on the RRF printer, with the kit: check macros, the air test (`heatsetcore.bringup`) and `models/heatset_bringup_coupon.3mf` (DECISIONS.md #50) | A rehearse run, every TBD measured, a coupon insert within `flush_tol` |
 | 9. Klipper (done, 0.4.0; not yet on a printer) | The spec's Klipper templates, its golden file, `firmware/klipper/heatset_macros.cfg` and `heatset_limits.cfg` | The spec's Klipper golden file byte for byte; P14; the macros run on the emitted G-code in `tests/klipper_sim.py` (DECISIONS.md #49) |
 
 ## Later

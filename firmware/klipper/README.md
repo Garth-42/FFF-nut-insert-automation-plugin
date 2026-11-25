@@ -12,6 +12,8 @@ below, with a hand near the emergency stop.
 - `heatset_macros.cfg`: the commands. Replace it when it changes.
 - `heatset_limits.cfg`: `_HS_LIMITS`, the hard limits and the names of your heater, follower,
   pause command and LED. Yours to edit; the G-code never changes these.
+- `heatset_checks.cfg`: bring-up checks, `HEATSET_CHECK_FLOAT` and `HEATSET_CHECK_FOLLOWER`.
+  Optional; nothing in a print calls them.
 
 ## What your printer config needs
 
@@ -38,6 +40,7 @@ Then, in `printer.cfg`, after your tool config:
 ```ini
 [include heatset_limits.cfg]
 [include heatset_macros.cfg]
+[include heatset_checks.cfg]
 ```
 
 Load the magazine and tell the macros: `HEATSET_REFILL KEY=M3x5.7 COUNT=12`.
@@ -66,21 +69,34 @@ before it moves, so resuming before fixing them stops that insert instead.
 `PROBE` has no travel limit in Klipper (the spec's phase 1): the macros check that the float
 reads open before every probe and press, and keep probe and press speeds under `max_speed`.
 
-## Bring-up, rehearse mode first
+## Bring-up, one step at a time
 
-In the plugin, set the heat-set profile's firmware to Klipper and its mode to Rehearse, and
-export a coupon with one insert. In rehearse mode the throat stays off, the follower never
-moves, nothing probes (the surface is taken as z_top + rehearse_lift) and the count does not
-change: every move of the routine runs rehearse_lift above the part, apart from the approach,
-which stops with the pad probe_start above it.
+Each step comes before the plugin's G-code touches anything. Keep a hand near the
+emergency stop. Note what you see in `docs/manual-test.md`, check I.
 
-1. Print it and watch each step. The console says `insert 1 rehearsed`.
-2. Check, and note the results in `docs/manual-test.md`:
-   - `QUERY_PROBE` reads triggered with the float pressed and unplugged, open otherwise;
-   - `PROBE` stops when the float trips and leaves the tool there;
-   - after `HEATSET_CONFIG` in normal mode, `G91`, `G1 A1 F60`, `G90` moves the follower 1 mm;
-   - the unsheath (`G1 Z.. A.. F..`) moves Z and A together at the same speed;
-   - excluding an object in the web interface skips its inserts;
-   - your pause command does not park the toolhead.
-3. Measure every TBD in the Machine settings tab, then go to normal mode with one insert in a
-   flat coupon.
+1. **The float.** `HEATSET_CHECK_FLOAT` with the float free (open), pushed up by hand
+   (TRIPPED) and unplugged (TRIPPED).
+2. **The follower.** Empty the magazine, then `HEATSET_CHECK_FOLLOWER DIST=1 SPEED=1`: the
+   stack side moves 1 mm toward the mouth and back.
+3. **The probe.** Select the heat-set tool, put the pad a few mm over a flat plate and run
+   `PROBE PROBE_SPEED=1` a few times: it must stop when the float trips. Klipper's `PROBE`
+   has no travel limit, so stay ready to stop it.
+4. **The air test.** On your computer, with the settings JSON from the Nut panel's Export
+   button saved as `nut_settings.json`:
+
+   ```bash
+   uv run python -m heatsetcore.bringup --x 150 --y 150 --z 40 --firmware klipper \
+       --settings nut_settings.json --out air_test.gcode
+   ```
+
+   One insert's routine in rehearse mode, its surface 40 mm over the bed. Print it with the
+   bed clear: the tool change and every move, no heat, no follower move, `insert 1
+   rehearsed` in the console. Pick X and Y so that X - pad_dx is on the bed too.
+5. **A coupon, rehearse mode.** Slice `models/heatset_bringup_coupon.3mf` with the profile in
+   Rehearse mode (`models/README.md`) and print it.
+6. **Measure every TBD** in the Machine settings tab, then normal mode with one insert in the
+   bring-up coupon.
+
+What only the printer can show, so check it along the way: `GCODE_AXIS=A` registration and
+`G1 A..` moves; the unsheath (`G1 Z.. A.. F..`) moving Z and A at the same speed; an object
+excluded in the web interface skipping its inserts; your pause command not parking.
