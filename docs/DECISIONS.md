@@ -443,5 +443,9 @@ Each entry says what differs from the spec and why. Newest last.
       two components are the block and the insert body. Whether Orca keeps components as
       named parts is for check F to confirm; `tests/test_models.py` reads the files back,
       checks every mesh is closed and faces outward, and gives each coupon its finding.
-    - **No CI.** The repository has no CI workflow; all of these are ordinary pytest tests
-      and run with `uv run pytest`.
+    - **CI.** `.github/workflows/tests.yml` runs ruff, every test and the wheel build on each
+      push and pull request, on Python 3.12 (the plugin's) and 3.13. The two tests that hold
+      the 100 ms handler budget (CLAUDE.md rule 6) take their limit from `tests/timing.py`,
+      which CI scales by 3 through `TIME_BUDGET_SCALE`: a shared runner is slower and busier
+      than a desk, where the limits stay as written. The 3MF models are compared by their
+      contents, not their zip bytes, since zlib builds compress the same data differently.

@@ -9,9 +9,10 @@ The design and the build brief are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-All seven milestones of the build brief are implemented. 394 tests pass on synthetic
+All seven milestones of the build brief are implemented. 397 tests pass on synthetic
 meshes and G-code, one real G-code file exported from OrcaSlicer, and a stand-in `orca`
-module.
+module. GitHub Actions runs them, with ruff and the wheel build, on every push and pull
+request (`.github/workflows/tests.yml`, Python 3.12 and 3.13).
 
 Heat-set inserts are being added, RepRapFirmware first: see
 [`docs/heatset-plan.md`](docs/heatset-plan.md) and

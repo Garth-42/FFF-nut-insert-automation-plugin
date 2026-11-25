@@ -36,6 +36,8 @@ RepRapFirmware comes first; Klipper later.
 - `uv run pytest -q` runs the tests.
 - `uv run ruff check` lints.
 - `uv build` makes `dist/nut_inserter-<version>-py3-none-any.whl`.
+- CI (`.github/workflows/tests.yml`) runs ruff, the tests and the build on Python 3.12 and 3.13 for every
+  push and pull request. Time limits in tests go through `tests/timing.py`, which CI scales.
 - `uv run python -m nutcore.cli check part.stl NUT_M3SQ=nut.stl`
 - `uv run python -m nutcore.cli inject report.json in.gcode --firmware klipper`
 

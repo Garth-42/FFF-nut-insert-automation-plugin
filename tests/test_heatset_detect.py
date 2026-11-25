@@ -15,6 +15,7 @@ from nutcore import library
 from nutcore.mesh import apply_matrix, rotation, scaling, translation
 from nutcore.rays import cast, cast_fan
 from nutcore.report import Report
+from timing import budget
 
 
 def measured(**change) -> library.Library:
@@ -199,7 +200,7 @@ def test_h18_knurled_body_in_a_fine_hole_is_quick():
              insert_body(sides=720, bore=2.5, knurl=0.15, centre=FLUSH)]
     start = time.perf_counter()
     r = one(parts)
-    assert time.perf_counter() - start < 0.1
+    assert time.perf_counter() - start < budget(0.1)
     assert (r.status, codes(r)) == ("ok", [])
     assert r.pocket["diameter"] == pytest.approx(4.0, abs=1e-3)
 

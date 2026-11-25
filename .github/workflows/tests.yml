@@ -1,0 +1,36 @@
+# Lint, tests and the wheel build, on every push and pull request.
+# The tests need neither OrcaSlicer nor a printer: the orca module and both firmwares
+# have stand-ins under tests/. See README.md, "Status".
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    env:
+      # Shared runners are slower than a desk; tests/timing.py scales the time limits.
+      TIME_BUDGET_SCALE: "3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check
+      - name: Tests
+        run: uv run pytest -q
+      - name: Build the wheel
+        run: uv build

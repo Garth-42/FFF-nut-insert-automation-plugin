@@ -2,6 +2,7 @@
 closed with its faces outward, and each coupon giving its findings when the files are read
 back the way Orca loads them (insert bodies set to Modifier, as the user does)."""
 
+import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -21,10 +22,16 @@ def measured() -> library.Library:
     return library.parse(config)
 
 
+def members(path: Path) -> dict[str, bytes]:
+    """What a 3MF holds, uncompressed: zlib builds compress the same bytes differently."""
+    with zipfile.ZipFile(path) as archive:
+        return {name: archive.read(name) for name in archive.namelist()}
+
+
 @pytest.mark.parametrize("name", FILES)
 def test_the_models_are_up_to_date(name, tmp_path):
     write_3mf(tmp_path / name, FILES[name])
-    assert (tmp_path / name).read_bytes() == (MODELS / name).read_bytes(), (
+    assert members(tmp_path / name) == members(MODELS / name), (
         "run: uv run python tests/models3mf.py")
 
 

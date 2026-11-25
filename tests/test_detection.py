@@ -7,6 +7,7 @@ from builders import box, merge, nut, part, pocket_block, snapshot, v_slot
 from nutcore import library
 from nutcore.mesh import rotation, scaling, translation
 from nutcore.pipeline import detect
+from timing import budget
 
 FLOOR = 4.4                       # floor slab thickness, so the pocket floor is at Z 4.4
 BED = translation((112.4, 87.25, FLOOR))
@@ -289,7 +290,7 @@ def test_nut_body_with_a_round_hole_and_many_facets():
     (n,) = run([pocket_block(bolt_hole=3.4), part("NUT_M3SQ", body)]).nuts
     assert (n.cls, n.status, n.findings) == ("FLAT", "ok", [])
     assert n.placement == pytest.approx([112.4, 87.25, 5.3], abs=TOL)
-    assert time.perf_counter() - start < 0.1
+    assert time.perf_counter() - start < budget(0.1)
 
 
 @pytest.mark.parametrize("roofed", [True, False])
