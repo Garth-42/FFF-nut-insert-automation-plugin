@@ -77,7 +77,10 @@ uv run python -m nutcore.cli inject report.json in.gcode --firmware klipper
 
 ## Install into OrcaSlicer
 
-1. Build the wheel with `uv build`.
+1. Get the wheel. Every push to `main` builds one and puts it on the
+   [`main-latest` pre-release](https://github.com/Garth-42/FFF-nut-insert-automation-plugin/releases/tag/main-latest)
+   (`.github/workflows/wheel.yml`); it is also attached to each run of the Wheel workflow.
+   Or build it yourself with `uv build`.
 2. Remove any older copy first: delete its folder (named after the old wheel file) from
    `orca_plugins` in OrcaSlicer's data folder. Two versions at once break each other.
 3. In the Plugins window choose "Install local plugin" and pick the `.whl`.
