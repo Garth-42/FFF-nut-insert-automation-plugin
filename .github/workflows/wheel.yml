@@ -1,0 +1,68 @@
+# On every push to main: lint, test and build the plugin wheel, then publish it two ways.
+#  - As a workflow artifact named nut-inserter-wheel on the run's summary page.
+#  - On the rolling pre-release "main-latest", replaced on each push, so the newest wheel
+#    is always at .../releases/download/main-latest/<wheel file>.
+# The wheel keeps the version from pyproject.toml, so its file name (which the process
+# preset stores) only changes when the version does.
+name: Wheel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publish at a time; a newer push cancels an older one still running.
+concurrency:
+  group: wheel-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the wheel
+    runs-on: ubuntu-latest
+    env:
+      TIME_BUDGET_SCALE: "3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check
+      - name: Tests
+        run: uv run pytest -q
+      - name: Build the wheel
+        run: uv build --wheel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nut-inserter-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  release:
+    name: Update the main-latest pre-release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nut-inserter-wheel
+          path: dist
+      - name: Replace the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete main-latest --cleanup-tag --yes || true
+          gh release create main-latest dist/*.whl \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Latest main build" \
+            --notes "Wheel built from ${GITHUB_SHA::7} on main, $(date -u '+%Y-%m-%d %H:%M UTC'). Replaced on every push to main. Install it with OrcaSlicer's \"Install local plugin\"; see README.md, \"Install into OrcaSlicer\"."

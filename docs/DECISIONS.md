@@ -450,9 +450,19 @@ Each entry says what differs from the spec and why. Newest last.
       than a desk, where the limits stay as written. The 3MF models are compared by their
       contents, not their zip bytes, since zlib builds compress the same data differently.
 
+## Wheel on every push to main (25 Nov 2026)
+
+- `.github/workflows/wheel.yml` runs ruff, the tests and `uv build --wheel` on Python 3.12
+  for each push to `main` (and by hand), uploads the wheel as the `nut-inserter-wheel` run
+  artifact, and replaces the `main-latest` pre-release with it. A release asset needs no
+  GitHub sign-in to download, unlike a run artifact, so testers use the release. The wheel
+  keeps the `pyproject.toml` version, so its file name, which the process preset stores,
+  changes only when the version is bumped. The release is deleted and created again on
+  each push so its tag always points at the commit the wheel came from.
+
 ## Plan review: three gaps closed (25 Nov 2026)
 
-52. **The plan caught up with what was built, and the real RRF export has a test waiting.**
+53. **The plan caught up with what was built, and the real RRF export has a test waiting.**
     - The plan's status paragraph and milestone 7 row now name the RRF stand-in, the
       bring-up kit and the test models (#51); the plan is revision 6.
     - `tests/test_heatset_rrf_export.py` checks the placement rules on
